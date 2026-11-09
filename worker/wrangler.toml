@@ -1,0 +1,8 @@
+# Stateless auth helper for the web build: OAuth code exchange and token refresh only.
+# It never stores tokens or calendar data.
+name = "schedee-auth"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+
+[observability]
+enabled = false
