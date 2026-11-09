@@ -5,16 +5,8 @@ import {
 	layoutDay,
 	Temporal,
 	type TimedPlacement,
-	weekOf,
 } from "@schedee/core";
-import {
-	ChevronDown,
-	ChevronLeft,
-	ChevronRight,
-	ChevronsDownUp,
-	Diff,
-	Plus,
-} from "lucide-react";
+import { ChevronsDownUp, Diff, Plus } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { type ChipColors, chipColors, type Theme } from "./chipColors";
 import { formatRange, formatTime, hourParts, nowParts } from "./format";
@@ -28,7 +20,6 @@ import {
 	CHIP_MARGIN_BOTTOM,
 	CHIP_MARGIN_RIGHT,
 	CHIP_MIN_HEIGHT,
-	DAY_WIDTH,
 	HEADER_HEIGHT,
 	PX_PER_MIN,
 	RIBBON_GAP,
@@ -36,33 +27,22 @@ import {
 } from "./geometry";
 
 const WEEKDAY = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const MONTH = [
-	"January",
-	"February",
-	"March",
-	"April",
-	"May",
-	"June",
-	"July",
-	"August",
-	"September",
-	"October",
-	"November",
-	"December",
-];
 /** x of the first day column inside the main area. */
 const COL0 = 71.5;
 const ALLDAY_TOP = HEADER_HEIGHT + 28;
 /** Hours that get a line and a gutter label (midnight's line is the all-day border). */
 const HOURS = Array.from({ length: 23 }, (_, k) => k + 1);
 
-export interface WeekViewProps {
+export interface DaysViewProps {
+	/** The day columns to show, in order. */
+	days: Temporal.PlainDate[];
+	/** Width of the main area; day columns share it. */
+	width: number;
 	events: CalendarEvent[];
 	calendars: Map<string, Calendar>;
 	now: Temporal.PlainDateTime;
 	timeZoneLabel: string;
 	theme: Theme;
-	avatarInitials?: string;
 	scrollTop?: number;
 }
 
@@ -196,17 +176,19 @@ function Ribbon({
 	);
 }
 
-export function WeekView({
+export function DaysView({
+	days,
+	width,
 	events,
 	calendars,
 	now,
 	timeZoneLabel,
 	theme,
-	avatarInitials = "",
 	scrollTop,
-}: WeekViewProps) {
+}: DaysViewProps) {
 	const today = now.toPlainDate();
-	const week = weekOf(today);
+	const dayWidth = (width - COL0 + 2.5) / days.length;
+	const lastDay = days.at(-1) ?? today;
 	const visible = events.filter((e) => !calendars.get(e.calendarId)?.hidden);
 	const nowMin = now.hour * 60 + now.minute + now.second / 60;
 	const nowY = nowMin * PX_PER_MIN;
@@ -218,8 +200,8 @@ export function WeekView({
 			now,
 		) <= 0;
 
-	const showsToday = week.days.some((d) => d.equals(today));
-	const allDay = layoutAllDay(visible, week.days);
+	const showsToday = days.some((d) => d.equals(today));
+	const allDay = layoutAllDay(visible, days);
 	const rows = allDay.reduce((m, p) => Math.max(m, p.row + 1), 0);
 	const allDayHeight = Math.min(
 		ALLDAY_MAX,
@@ -232,62 +214,18 @@ export function WeekView({
 		Math.max(0, Math.min(1152 - gridHeight, nowY - gridHeight / 3));
 
 	const columns = (render: (d: Temporal.PlainDate) => ReactNode) =>
-		week.days.map((d, i) => (
+		days.map((d, i) => (
 			<div
 				key={d.toString()}
 				className={`sch-col${d.dayOfWeek >= 6 ? " sch-col--weekend" : ""}`}
-				style={{ left: COL0 + i * DAY_WIDTH }}
+				style={{ left: COL0 + i * dayWidth, width: dayWidth }}
 			>
 				{render(d)}
 			</div>
 		));
 
 	return (
-		<main className="sch-main" data-schedee-week>
-			<div className="sch-toolbar">
-				<div className="sch-avatar" style={{ left: 653.7 }}>
-					{avatarInitials}
-				</div>
-				<button
-					type="button"
-					className="sch-btn"
-					style={{ left: 689.7, width: 76.2 }}
-				>
-					Week
-					<ChevronDown size={14} strokeWidth={1.75} className="sch-icon" />
-				</button>
-				<button
-					type="button"
-					className="sch-btn"
-					style={{ left: 771.9, width: 61.1 }}
-				>
-					Today
-				</button>
-				<button
-					type="button"
-					className="sch-iconbtn"
-					style={{ left: 845, top: 8 }}
-					aria-label="Previous week"
-				>
-					<ChevronLeft size={18} strokeWidth={1.5} className="sch-icon" />
-				</button>
-				<button
-					type="button"
-					className="sch-iconbtn"
-					style={{ left: 876, top: 8 }}
-					aria-label="Next week"
-				>
-					<ChevronRight size={18} strokeWidth={1.5} className="sch-icon" />
-				</button>
-			</div>
-
-			<div className="sch-title">
-				<span className="sch-title__month">
-					{MONTH[today.month - 1]} {today.year}
-				</span>
-				<span className="sch-title__week">Week {week.start.weekOfYear}</span>
-			</div>
-
+		<>
 			<div className="sch-dayhead">
 				<button
 					type="button"
@@ -298,15 +236,15 @@ export function WeekView({
 					<Plus size={12} strokeWidth={1.75} className="sch-icon" />
 				</button>
 				<div className="sch-tz">{timeZoneLabel}</div>
-				{week.days.map((d, i) => {
+				{days.map((d, i) => {
 					const isToday = d.equals(today);
 					return (
 						<div
 							key={d.toString()}
 							className={`sch-dayhead__cell${isToday ? " sch-dayhead__cell--today" : ""}`}
-							style={{ left: COL0 + i * DAY_WIDTH, width: DAY_WIDTH }}
+							style={{ left: COL0 + i * dayWidth, width: dayWidth }}
 						>
-							<span>{WEEKDAY[i]}</span>
+							<span>{WEEKDAY[d.dayOfWeek - 1]}</span>
 							{isToday ? (
 								<span className="sch-badge">{d.day}</span>
 							) : (
@@ -318,7 +256,7 @@ export function WeekView({
 				<button
 					type="button"
 					className="sch-iconbtn"
-					style={{ left: 898, top: 6, width: 16, height: 16 }}
+					style={{ right: 2, top: 6, width: 16, height: 16 }}
 					aria-label="Days shown"
 				>
 					<Diff size={12} strokeWidth={1.75} className="sch-icon" />
@@ -345,8 +283,16 @@ export function WeekView({
 								colorsFor(p.event, calendars, theme, isPast(p.event)),
 							),
 							top: ALLDAY_INSET + p.row * ALLDAY_ROW,
-							left: COL0 + p.startCol * DAY_WIDTH,
-							width: p.span * DAY_WIDTH - CHIP_MARGIN_RIGHT,
+							left: COL0 + p.startCol * dayWidth,
+							// Events that run past the last visible day reach the edge.
+							width:
+								p.span * dayWidth -
+								(Temporal.PlainDate.compare(
+									Temporal.PlainDate.from(p.event.end),
+									lastDay.add({ days: 1 }),
+								) > 0
+									? 0
+									: CHIP_MARGIN_RIGHT),
 							height: ALLDAY_CHIP,
 						}}
 					>
@@ -375,12 +321,15 @@ export function WeekView({
 								</div>
 							);
 						})}
-						{showsToday && (
-							<div className="sch-nowlabel" style={{ top: nowY - 9 }}>
+						{
+							<div
+								className={`sch-nowlabel${showsToday ? "" : " sch-nowlabel--bare"}`}
+								style={{ top: nowY - 9 }}
+							>
 								{nowParts(nowMin)[0]}
 								<span>{nowParts(nowMin)[1]}</span>
 							</div>
-						)}
+						}
 					</div>
 					{columns((d) => {
 						const placed = layoutDay(visible, d);
@@ -421,7 +370,7 @@ export function WeekView({
 											key={c.event.id}
 											p={c}
 											x={offset}
-											areaWidth={DAY_WIDTH - offset}
+											areaWidth={dayWidth - offset}
 											colors={colorsFor(
 												c.event,
 												calendars,
@@ -445,6 +394,6 @@ export function WeekView({
 					})}
 				</div>
 			</div>
-		</main>
+		</>
 	);
 }

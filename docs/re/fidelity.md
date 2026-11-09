@@ -19,23 +19,25 @@ Rendering details that matter:
 - **`--force-color-profile=srgb`**, so both sides share one color space.
 - **Masks:** the account avatar photo, and the macOS overlay scrollbar the reference machine draws on the calendar list.
 
-## Results (M1, 2026-11-09)
+## Results (M2a, 2026-11-09)
 
 Mismatched pixels per region, in percent:
 
 | Region        | Light | Dark  |
 | ------------- | ----- | ----- |
 | Sidebar       | 0.479 | 0.940 |
-| Toolbar       | 0.042 | 0.071 |
+| Toolbar       | 0.032 | 0.048 |
 | Title         | 0.497 | 0.475 |
 | Day header    | 0.251 | 0.242 |
 | All-day       | 0.085 | 0.133 |
 | Gutter        | 0.079 | 0.038 |
 | Grid          | 0.167 | 0.335 |
 | Context panel | 0.067 | 0.067 |
-| **Total**     | 0.194 | 0.346 |
+| **Total**     | 0.194 | 0.345 |
 
 Every grid line, hour line, column edge and the all-day border land on the reference's exact device pixels. An alignment search (best shift within ±3px per element) finds no remaining offset for day labels, calendar rows, chips or the now indicator.
+
+Day, N-day and month views share the week view's kit. They are checked structurally (geometry measured from the reference month and day captures) but not pixel-diffed, because no private fixture covers the six weeks the month capture shows.
 
 ## Known differences
 
