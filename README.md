@@ -15,6 +15,29 @@ It runs in the browser at [sched.ee](https://sched.ee) and as a small desktop ap
 
 Early. Nothing to install yet. Follow the [issues](https://github.com/heyjawrsh/schedee/issues) to see what's being built.
 
+## Development
+
+You need Node 26 and pnpm 12 (`mise install` sets both up from `mise.toml`), plus a Rust toolchain for the desktop app.
+
+```sh
+pnpm install
+pnpm dev          # web app on http://localhost:5173
+pnpm desktop      # Tauri desktop app
+pnpm test         # unit tests
+pnpm test:e2e     # Playwright in Chromium and WebKit
+pnpm typecheck
+pnpm lint
+```
+
+| Path            | What lives there                                             |
+| --------------- | ------------------------------------------------------------ |
+| `apps/web`      | The React app that runs at sched.ee                          |
+| `apps/desktop`  | Tauri shell around the web build                             |
+| `packages/core` | Event model, recurrence, time zones, sync, provider adapters |
+| `packages/ui`   | Shared UI kit                                                |
+| `worker`        | Stateless Cloudflare Worker for OAuth token exchange         |
+| `docs/re`       | Measurements taken from the reference app                    |
+
 ## License
 
 [AGPL-3.0](LICENSE). If you run a modified Schedee as a service, you share your changes.
