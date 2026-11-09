@@ -20,7 +20,11 @@ Follow `PLAN.md` milestones (kept in the maintainer's notes; summary in issue #1
 
 ## Gates
 
-`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e` and `pnpm build` must pass. Fidelity is judged against reference captures with an anti-aliasing tolerant diff, never against our own renders.
+`pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e` and `pnpm build` must pass. Fidelity is judged against reference captures with an anti-aliasing tolerant diff, never against our own renders: `pnpm fidelity -- --theme light` (and `dark`), method and current numbers in `docs/re/fidelity.md`. Any UI change re-runs both themes and must not raise a region's mismatch.
+
+`packages/ui` is the frozen kit: new screens consume it. Changing an existing kit component needs the fidelity run to stay flat.
+
+Note: the RTK shell hook rewrites `pnpm lint` and `biome check` and can hide Biome's real output. Run `./node_modules/.bin/biome check .` directly when in doubt.
 
 ## Platform notes
 

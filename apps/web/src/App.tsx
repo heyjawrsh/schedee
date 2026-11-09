@@ -1,15 +1,43 @@
-import { Temporal, weekOf } from "@schedee/core";
+import type { CalendarSnapshot } from "@schedee/core";
+import { Schedee, type Theme } from "@schedee/ui";
+import { useEffect, useState } from "react";
+import { demoSnapshot } from "./demo";
+
+declare global {
+	interface Window {
+		/** Injected by the fidelity harness and tests. */
+		__SCHEDEE_SNAPSHOT__?: CalendarSnapshot | null;
+		__SCHEDEE_THEME__?: Theme;
+		__SCHEDEE_SCROLL_TOP__?: number;
+	}
+}
+
+const systemTheme = (): Theme =>
+	matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 
 export function App() {
-	const week = weekOf(Temporal.Now.plainDateISO());
+	const [snapshot] = useState(
+		() => window.__SCHEDEE_SNAPSHOT__ ?? demoSnapshot(),
+	);
+	const [theme, setTheme] = useState<Theme>(
+		() => window.__SCHEDEE_THEME__ ?? systemTheme(),
+	);
+
+	useEffect(() => {
+		if (window.__SCHEDEE_THEME__) return;
+		const mq = matchMedia("(prefers-color-scheme: dark)");
+		const onChange = () => setTheme(systemTheme());
+		mq.addEventListener("change", onChange);
+		return () => mq.removeEventListener("change", onChange);
+	}, []);
+
 	return (
-		<main className="grid min-h-dvh place-items-center bg-neutral-950 text-neutral-100">
-			<div className="text-center">
-				<h1 className="text-2xl font-semibold">Schedee</h1>
-				<p className="mt-1 text-sm text-neutral-400" data-testid="week-range">
-					{week.start.toString()} to {week.end.toString()}
-				</p>
-			</div>
-		</main>
+		<Schedee
+			snapshot={snapshot}
+			theme={theme}
+			{...(window.__SCHEDEE_SCROLL_TOP__ === undefined
+				? {}
+				: { scrollTop: window.__SCHEDEE_SCROLL_TOP__ })}
+		/>
 	);
 }

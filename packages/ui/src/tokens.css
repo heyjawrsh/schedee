@@ -1,0 +1,81 @@
+/* Schedee design tokens. Values measured from the reference app; see docs/re/tokens.md. */
+:root {
+	color-scheme: light;
+	--font-ui:
+		ui-sans-serif, -apple-system, BlinkMacSystemFont,
+		"Segoe UI Variable Display", "Segoe UI", Helvetica, "Apple Color Emoji",
+		Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+	--font-chip:
+		ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+		"Helvetica Neue", Helvetica, Arial, sans-serif;
+
+	--text-primary: #32302c;
+	--text-secondary: #787774;
+	--text-tertiary: rgba(70, 68, 64, 0.45);
+	--text-quaternary: rgba(81, 73, 60, 0.32);
+	--text-suffix: #787774;
+	--text-on-accent: #ffffff;
+	--text-kbd: rgba(0, 0, 0, 0.45);
+
+	--icon-primary: #32302c;
+	--icon-secondary: rgba(71, 70, 68, 0.6);
+	--icon-tertiary: rgba(81, 73, 60, 0.32);
+
+	--surface-grid: #ffffff;
+	--surface-grid-weekend: #fcfcfc;
+	--surface-sidebar: #f8f8f7;
+	--surface-panel: #ffffff;
+	--surface-input: rgba(0, 0, 0, 0.04);
+	--surface-kbd: rgba(0, 0, 0, 0.07);
+	--surface-button-top: #fcfcfc;
+	--surface-button-bottom: #f7f7f7;
+	--surface-week-band: rgba(84, 72, 49, 0.08);
+	--state-hover: rgba(0, 0, 0, 0.04);
+
+	--grid-line-hour: #f6f6f6;
+	--grid-line-hour-weekend: #f2f2f2;
+	--grid-line-day: #eeeeee;
+	--grid-line-day-weekend: #ececec;
+	--border-divider: rgba(84, 72, 49, 0.08);
+	--border-avatar: rgba(0, 0, 0, 0.1);
+
+	--accent: #f04842;
+	--now-ring: #ffffff;
+	--now-shadow: rgba(0, 0, 0, 0.04);
+}
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
+	--text-primary: rgba(255, 255, 255, 0.81);
+	--text-secondary: rgba(255, 255, 255, 0.443);
+	--text-tertiary: rgba(255, 255, 255, 0.282);
+	--text-quaternary: rgba(255, 255, 255, 0.13);
+	--text-suffix: #7f7f7f;
+	--text-kbd: rgba(255, 255, 255, 0.55);
+
+	--icon-primary: rgba(255, 255, 255, 0.81);
+	--icon-secondary: rgba(255, 255, 255, 0.443);
+	--icon-tertiary: rgba(255, 255, 255, 0.282);
+
+	--surface-grid: #191919;
+	--surface-grid-weekend: #171717;
+	--surface-sidebar: #202020;
+	--surface-panel: #191919;
+	--surface-input: rgba(255, 255, 255, 0.05);
+	--surface-kbd: rgba(255, 255, 255, 0.08);
+	--surface-button-top: #292929;
+	--surface-button-bottom: #242424;
+	--surface-week-band: rgba(255, 255, 255, 0.055);
+	--state-hover: rgba(255, 255, 255, 0.05);
+
+	--grid-line-hour: #1f1f1f;
+	--grid-line-hour-weekend: #1e1e1e;
+	--grid-line-day: #222222;
+	--grid-line-day-weekend: #212121;
+	--border-divider: rgba(255, 255, 255, 0.055);
+	--border-avatar: rgba(255, 255, 255, 0.1);
+
+	--accent: #f15550;
+	--now-ring: #000000;
+	--now-shadow: rgba(0, 0, 0, 0.08);
+}
