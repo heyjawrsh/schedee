@@ -39,6 +39,31 @@ export interface CalendarEvent {
 	busy?: boolean;
 	rsvp?: Rsvp;
 	glyph?: "gift";
+	/** IANA zone the timed start/end are written in. Defaults to the snapshot's zone. */
+	timeZone?: string;
+	/** Present on a series master. */
+	recurrence?: Recurrence;
+	/** Present on a single-instance override: the series it belongs to... */
+	recurringEventId?: string;
+	/** ...and the start of the occurrence it replaces, in the series' own format and zone. */
+	originalStart?: string;
+	/** A cancelled override hides its occurrence. */
+	status?: "confirmed" | "cancelled";
+	location?: string;
+	description?: string;
+}
+
+export interface Recurrence {
+	/** RFC 5545 RRULE value without the "RRULE:" prefix, e.g. "FREQ=WEEKLY;BYDAY=MO,WE". */
+	rrule: string;
+	/** Occurrence starts to skip, in the same format and zone as `start`. */
+	exdates?: string[];
+}
+
+/** A concrete, displayable occurrence in the viewer's zone. */
+export interface EventInstance extends CalendarEvent {
+	/** The series (or single event) this instance comes from. */
+	sourceId: string;
 }
 
 /** A static snapshot of everything the week view needs to render. */

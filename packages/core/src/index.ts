@@ -1,4 +1,5 @@
 export { Temporal } from "temporal-polyfill";
+export { convertZone, type DateRange, expandEvents } from "./expand";
 export {
 	type AllDayPlacement,
 	layoutAllDay,
@@ -12,6 +13,18 @@ export type {
 	CalendarColor,
 	CalendarEvent,
 	CalendarSnapshot,
+	EventInstance,
+	Recurrence,
 	Rsvp,
 } from "./model";
+export {
+	goTo,
+	initialView,
+	setView,
+	step,
+	type ViewKind,
+	type ViewState,
+	viewLabel,
+	visibleDays,
+} from "./navigation";
 export { type DayOfWeek, type WeekRange, weekOf } from "./week";

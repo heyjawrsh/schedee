@@ -1,4 +1,4 @@
-import { type Account, Temporal } from "@schedee/core";
+import type { Account, Temporal } from "@schedee/core";
 import {
 	ChevronDown,
 	ChevronUp,
@@ -12,14 +12,27 @@ import {
 	SquarePen,
 	UserRound,
 } from "lucide-react";
-import type { CSSProperties } from "react";
+import { type CSSProperties, useEffect, useState } from "react";
 import type { Theme } from "./chipColors";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
-function MiniMonth({ today }: { today: Temporal.PlainDate }) {
-	const first = today.with({ day: 1 });
-	const start = first.subtract({ days: first.dayOfWeek - 1 });
+function MiniMonth({
+	today,
+	focus,
+	band,
+	onPick,
+}: {
+	today: Temporal.PlainDate;
+	/** The date the main view is on; the mini-month follows it to its month. */
+	focus: Temporal.PlainDate;
+	/** First day of the week to highlight, if any. */
+	band?: Temporal.PlainDate;
+	onPick?: (d: Temporal.PlainDate) => void;
+}) {
+	const [shown, setShown] = useState(() => focus.with({ day: 1 }));
+	useEffect(() => setShown(focus.with({ day: 1 })), [focus]);
+	const start = shown.subtract({ days: shown.dayOfWeek - 1 });
 	const weeks = Array.from({ length: 6 }, (_, w) => start.add({ weeks: w }));
 	return (
 		<div className="sch-mini">
@@ -29,6 +42,7 @@ function MiniMonth({ today }: { today: Temporal.PlainDate }) {
 					className="sch-iconbtn"
 					style={{ left: 170 }}
 					aria-label="Previous month"
+					onClick={() => setShown((m) => m.subtract({ months: 1 }))}
 				>
 					<ChevronUp className="sch-icon" size={16} strokeWidth={1.75} />
 				</button>
@@ -37,6 +51,7 @@ function MiniMonth({ today }: { today: Temporal.PlainDate }) {
 					className="sch-iconbtn"
 					style={{ left: 198 }}
 					aria-label="Next month"
+					onClick={() => setShown((m) => m.add({ months: 1 }))}
 				>
 					<ChevronDown className="sch-icon" size={16} strokeWidth={1.75} />
 				</button>
@@ -49,29 +64,27 @@ function MiniMonth({ today }: { today: Temporal.PlainDate }) {
 					</div>
 				))}
 			</div>
-			{weeks.map((monday) => {
-				const current =
-					Temporal.PlainDate.compare(monday, today) <= 0 &&
-					monday.until(today).days < 7;
-				return (
-					<div key={monday.toString()} className="sch-mini__row">
-						{current && <div className="sch-mini__band" />}
-						<div className="sch-mini__wn">{monday.weekOfYear}</div>
-						{Array.from({ length: 7 }, (_, i) => {
-							const d = monday.add({ days: i });
-							return (
-								<div
-									key={d.toString()}
-									className={`sch-mini__day${d.month !== today.month ? " sch-mini__day--out" : ""}`}
-								>
-									{d.equals(today) && <div className="sch-mini__today" />}
-									<span>{d.day}</span>
-								</div>
-							);
-						})}
-					</div>
-				);
-			})}
+			{weeks.map((monday) => (
+				<div key={monday.toString()} className="sch-mini__row">
+					{band?.equals(monday) && <div className="sch-mini__band" />}
+					<div className="sch-mini__wn">{monday.weekOfYear}</div>
+					{Array.from({ length: 7 }, (_, i) => {
+						const d = monday.add({ days: i });
+						return (
+							<button
+								type="button"
+								key={d.toString()}
+								className={`sch-mini__day${d.month !== shown.month ? " sch-mini__day--out" : ""}`}
+								onClick={() => onPick?.(d)}
+								aria-label={d.toString()}
+							>
+								{d.equals(today) && <div className="sch-mini__today" />}
+								<span>{d.day}</span>
+							</button>
+						);
+					})}
+				</div>
+			))}
 		</div>
 	);
 }
@@ -99,10 +112,16 @@ export function Sidebar({
 	accounts,
 	today,
 	theme,
+	focus = today,
+	band,
+	onPickDate,
 }: {
 	accounts: Account[];
 	today: Temporal.PlainDate;
 	theme: Theme;
+	focus?: Temporal.PlainDate;
+	band?: Temporal.PlainDate;
+	onPickDate?: (d: Temporal.PlainDate) => void;
 }) {
 	return (
 		<aside className="sch-sidebar">
@@ -132,7 +151,12 @@ export function Sidebar({
 					<SquarePen className="sch-icon" size={18} strokeWidth={1.5} />
 				</button>
 			</div>
-			<MiniMonth today={today} />
+			<MiniMonth
+				today={today}
+				focus={focus}
+				{...(band ? { band } : {})}
+				{...(onPickDate ? { onPick: onPickDate } : {})}
+			/>
 			<div className="sch-navrow" style={{ top: 287 }}>
 				<Link2 className="sch-icon" size={18} strokeWidth={1.5} />
 				<span>Scheduling</span>

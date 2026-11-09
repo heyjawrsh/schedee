@@ -270,8 +270,8 @@
 /* ---------------------------------------------------------------- main */
 .sch-main {
 	position: relative;
-	width: 916px;
-	flex: none;
+	flex: 1 1 auto;
+	min-width: 0;
 	background: var(--surface-grid);
 }
 .sch-toolbar {
@@ -281,11 +281,24 @@
 	right: 0;
 	height: 42px;
 }
-.sch-btn {
+.sch-toolbar__right {
 	position: absolute;
 	top: 8px;
+	right: 10px;
 	height: 30px;
-	padding: 0 10px;
+	display: flex;
+	align-items: center;
+}
+.sch-toolbar__right > .sch-iconbtn {
+	position: static;
+}
+.sch-toolbar__right > .sch-iconbtn + .sch-iconbtn {
+	margin-left: 1px;
+}
+.sch-btn {
+	position: relative;
+	height: 30px;
+	padding: 0 12px;
 	border-radius: 6px;
 	gap: 4px;
 	font-size: 13px;
@@ -299,9 +312,41 @@
 	);
 	box-shadow: inset 0 0 0 1px var(--border-divider);
 }
-.sch-avatar {
+.sch-btn--today {
+	margin: 0 12px 0 6px;
+}
+.sch-menuwrap {
+	position: relative;
+}
+.sch-menu {
 	position: absolute;
-	top: 11px;
+	top: 34px;
+	right: 0;
+	min-width: 168px;
+	padding: 4px;
+	border-radius: 12px;
+	background: var(--surface-popover);
+	box-shadow:
+		var(--shadow-lg),
+		0 0 0 1px var(--border-divider);
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+}
+.sch-menu__item {
+	height: 28px;
+	padding: 0 8px;
+	border-radius: 6px;
+	justify-content: space-between;
+	font-size: 13px;
+	line-height: 18px;
+	color: var(--text-primary);
+}
+.sch-menu__item:hover {
+	background: var(--state-hover);
+}
+.sch-avatar {
+	margin-right: 12px;
 	width: 24px;
 	height: 24px;
 	border-radius: 50%;
@@ -646,6 +691,147 @@
 	letter-spacing: -0.3px;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
+}
+
+/* Today is off-screen: the label stays as plain red text and the lines go away. */
+.sch-nowlabel--bare {
+	background: transparent;
+	color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- month */
+.sch-dayhead__cell--todayname {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+.sch-month__wlabel {
+	position: absolute;
+	left: 0;
+	top: 4.5px;
+	width: 24px;
+	height: 19px;
+	line-height: 19px;
+	text-align: center;
+	font-size: 10px;
+	font-weight: 500;
+	color: var(--text-tertiary);
+}
+.sch-month {
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	border-top: 1px solid var(--grid-line-day);
+	margin-top: -1px;
+}
+.sch-month__weeknums {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	box-sizing: border-box;
+	border-right: 1px solid var(--grid-line-day);
+}
+.sch-month__row {
+	position: absolute;
+	left: 0;
+	right: 0;
+	box-sizing: border-box;
+	border-bottom: 1px solid var(--grid-line-day);
+}
+.sch-month__wn {
+	position: absolute;
+	left: 0;
+	top: 9px;
+	width: 23px;
+	text-align: center;
+	font-size: 10px;
+	line-height: 13px;
+	font-weight: 500;
+	color: var(--text-tertiary);
+}
+.sch-month__cell {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	box-sizing: border-box;
+	border-right: 1px solid var(--grid-line-day);
+	background: var(--surface-grid);
+	align-items: flex-start;
+	justify-content: flex-end;
+}
+.sch-month__cell--weekend {
+	background: var(--surface-grid-weekend);
+	border-right-color: var(--grid-line-day-weekend);
+}
+.sch-month__num {
+	margin: 4px 6px 0 0;
+	height: 19px;
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 13px;
+	line-height: 18px;
+	font-weight: 500;
+	color: var(--text-primary);
+}
+.sch-month__num--out {
+	color: var(--text-tertiary);
+}
+.sch-month__num > b {
+	font-weight: 600;
+}
+.sch-mitem {
+	position: absolute;
+	height: 19px;
+	padding-left: 8px;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	gap: 3px;
+	overflow: hidden;
+	white-space: nowrap;
+	font-family: var(--font-chip);
+}
+.sch-mitem::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	border-radius: 4px 0 0 4px;
+	background: var(--chip-bar);
+}
+.sch-mitem__time {
+	flex: none;
+	font-family: var(--font-ui);
+	font-variant-numeric: tabular-nums;
+	font-size: 10px;
+	color: var(--chip-time);
+}
+.sch-mitem__title {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	font-size: 11px;
+	line-height: 13px;
+	font-weight: 500;
+	color: var(--text-primary);
+}
+.sch-mitem--past .sch-mitem__title {
+	color: var(--text-secondary);
+}
+.sch-mitem--past::before {
+	opacity: 0.5;
+}
+.sch-month__more {
+	position: absolute;
+	height: 19px;
+	line-height: 19px;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-secondary);
 }
 
 /* ---------------------------------------------------------------- context panel */
