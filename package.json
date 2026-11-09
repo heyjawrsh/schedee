@@ -1,25 +1,26 @@
 {
-	"name": "schedee",
-	"version": "0.1.0",
-	"private": true,
-	"type": "module",
-	"license": "AGPL-3.0-only",
-	"packageManager": "pnpm@12.9.1",
-	"engines": {
-		"node": ">=26"
-	},
-	"scripts": {
-		"dev": "pnpm --filter @schedee/web dev",
-		"desktop": "pnpm --filter @schedee/desktop tauri dev",
-		"build": "pnpm -r run build",
-		"test": "pnpm -r run test",
-		"test:e2e": "pnpm --filter @schedee/web test:e2e",
-		"typecheck": "pnpm -r run typecheck",
-		"lint": "biome check .",
-		"format": "biome check --write ."
-	},
-	"devDependencies": {
-		"@biomejs/biome": "2.6.6",
-		"typescript": "7.0.2"
-	}
+  "name": "schedee",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@12.9.1",
+  "engines": {
+    "node": ">=26"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @schedee/web dev",
+    "desktop": "pnpm --filter @schedee/desktop tauri dev",
+    "build": "pnpm -r run build",
+    "test": "pnpm -r run test",
+    "test:e2e": "pnpm --filter @schedee/web test:e2e",
+    "typecheck": "pnpm -r run typecheck",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "fidelity": "pnpm --filter @schedee/web fidelity"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.6",
+    "typescript": "7.0.2"
+  }
 }

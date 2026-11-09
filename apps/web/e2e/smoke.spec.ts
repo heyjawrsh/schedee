@@ -1,9 +1,20 @@
 import { expect, test } from "@playwright/test";
 
-test("app shell renders the current week", async ({ page }) => {
+test("renders the demo week", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto("/");
-	await expect(page.getByRole("heading", { name: "Schedee" })).toBeVisible();
-	await expect(page.getByTestId("week-range")).toHaveText(
-		/^\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}$/,
-	);
+	await expect(page.locator("[data-schedee-ready]")).toBeVisible();
+	await expect(page.getByText("Useful shortcuts")).toBeVisible();
+	await expect(page.locator(".sch-dayhead__cell")).toHaveCount(7);
+	await expect(page.locator(".sch-badge")).toHaveCount(1);
+	await expect(
+		page.getByText("Quarterly planning with the platform group"),
+	).toBeVisible();
+});
+
+test("captures the demo for visual review", async ({ page, browserName }, info) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto("/");
+	await page.locator("[data-schedee-ready]").waitFor();
+	await page.screenshot({ path: info.outputPath(`demo-${browserName}.png`) });
 });
