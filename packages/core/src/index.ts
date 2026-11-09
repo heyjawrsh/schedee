@@ -1,4 +1,12 @@
 export { Temporal } from "temporal-polyfill";
+export {
+	applyDelete,
+	applyEdit,
+	type EditResult,
+	type EditScope,
+	type EventPatch,
+	overrideId,
+} from "./edit";
 export { convertZone, type DateRange, expandEvents } from "./expand";
 export {
 	type AllDayPlacement,
@@ -9,10 +17,12 @@ export {
 } from "./layout";
 export type {
 	Account,
+	Attendee,
 	Calendar,
 	CalendarColor,
 	CalendarEvent,
 	CalendarSnapshot,
+	Conference,
 	EventInstance,
 	Recurrence,
 	Rsvp,
@@ -27,4 +37,6 @@ export {
 	viewLabel,
 	visibleDays,
 } from "./navigation";
+export { formatDuration, parseDate, parseTime } from "./parse";
+export { describeRule, type RulePreset, rulePresets } from "./rules";
 export { type DayOfWeek, type WeekRange, weekOf } from "./week";

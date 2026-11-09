@@ -80,7 +80,12 @@ export function expandEvents(
 	const to = range.end.add({ days: 1 }).toZonedDateTime({ timeZone: viewZone });
 	const out: EventInstance[] = [];
 
-	const place = (e: CalendarEvent, id: string, sourceId: string) => {
+	const place = (
+		e: CalendarEvent,
+		id: string,
+		sourceId: string,
+		occurrence?: string,
+	) => {
 		if (e.status === "cancelled") return;
 		if (e.allDay) {
 			const s = Temporal.PlainDate.from(e.start);
@@ -90,7 +95,7 @@ export function expandEvents(
 				Temporal.PlainDate.compare(s, range.end) >= 0
 			)
 				return;
-			out.push({ ...e, id, sourceId });
+			out.push({ ...e, id, sourceId, ...(occurrence ? { occurrence } : {}) });
 			return;
 		}
 		const zone = e.timeZone ?? viewZone;
@@ -105,6 +110,7 @@ export function expandEvents(
 			...e,
 			id,
 			sourceId,
+			...(occurrence ? { occurrence } : {}),
 			start: s.toString(),
 			end: en.toString(),
 			timeZone: viewZone,
@@ -131,7 +137,7 @@ export function expandEvents(
 			const id = `${e.id}@${key}`;
 			if (override) {
 				const { recurrence: _ignored, ...single } = override;
-				place(single, id, e.id);
+				place(single, id, e.id, key);
 				continue;
 			}
 			const occurrence: CalendarEvent = e.allDay
@@ -145,7 +151,7 @@ export function expandEvents(
 						start: startDt.toString(),
 						end: startDt.add(duration).toString(),
 					};
-			place(occurrence, id, e.id);
+			place(occurrence, id, e.id, key);
 		}
 	}
 	return out;

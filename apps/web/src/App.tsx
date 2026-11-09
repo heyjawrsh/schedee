@@ -1,8 +1,12 @@
-import { type CalendarSnapshot, Temporal } from "@schedee/core";
+import {
+	type CalendarSnapshot,
+	type EditResult,
+	Temporal,
+} from "@schedee/core";
 import { Schedee, type Theme } from "@schedee/ui";
 import { useEffect, useState } from "react";
 import { demoSeed } from "./demo";
-import { createLocalStore } from "./store/db";
+import { createLocalStore, type LocalStore } from "./store/db";
 
 declare global {
 	interface Window {
@@ -10,6 +14,7 @@ declare global {
 		__SCHEDEE_SNAPSHOT__?: CalendarSnapshot | null;
 		__SCHEDEE_THEME__?: Theme;
 		__SCHEDEE_SCROLL_TOP__?: number;
+		__SCHEDEE_SELECT__?: string;
 	}
 }
 
@@ -38,7 +43,10 @@ function useTheme(): Theme {
 }
 
 /** Live data: the local store, plus a clock that ticks every 30 seconds. */
-function useLiveSnapshot(enabled: boolean): CalendarSnapshot | null {
+function useLiveSnapshot(
+	enabled: boolean,
+): [CalendarSnapshot | null, LocalStore | null] {
+	const [store, setStore] = useState<LocalStore | null>(null);
 	const [data, setData] = useState<Pick<
 		CalendarSnapshot,
 		"accounts" | "events"
@@ -46,22 +54,24 @@ function useLiveSnapshot(enabled: boolean): CalendarSnapshot | null {
 	const [now, setNow] = useState(nowIso);
 	useEffect(() => {
 		if (!enabled) return;
-		const store = createLocalStore(demoSeed);
-		const off = store.subscribe(setData);
+		const s = createLocalStore(demoSeed);
+		setStore(s);
+		const off = s.subscribe(setData);
 		const tick = setInterval(() => setNow(nowIso()), 30_000);
 		return () => {
 			off();
 			clearInterval(tick);
 		};
 	}, [enabled]);
-	return data
-		? { ...data, now, timeZone: zone, timeZoneLabel: zoneLabel }
-		: null;
+	return [
+		data ? { ...data, now, timeZone: zone, timeZoneLabel: zoneLabel } : null,
+		store,
+	];
 }
 
 export function App() {
 	const injected = window.__SCHEDEE_SNAPSHOT__ ?? null;
-	const live = useLiveSnapshot(!injected);
+	const [live, store] = useLiveSnapshot(!injected);
 	const theme = useTheme();
 	const snapshot = injected ?? live;
 	if (!snapshot) return null;
@@ -69,6 +79,12 @@ export function App() {
 		<Schedee
 			snapshot={snapshot}
 			theme={theme}
+			{...(window.__SCHEDEE_SELECT__
+				? { initialSelectedId: window.__SCHEDEE_SELECT__ }
+				: {})}
+			{...(store && !injected
+				? { onCommit: (r: EditResult) => void store.commit(r) }
+				: {})}
 			{...(window.__SCHEDEE_SCROLL_TOP__ === undefined
 				? {}
 				: { scrollTop: window.__SCHEDEE_SCROLL_TOP__ })}

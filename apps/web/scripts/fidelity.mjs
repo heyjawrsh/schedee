@@ -36,6 +36,10 @@ const referencePath = arg(
 	resolve(repo, `.re/reference/week-${theme}.srgb.png`),
 );
 const outDir = arg("out", resolve(repo, ".re/fidelity"));
+// Optional: preselect an event (opens the editor) and limit the report to some regions.
+const select = arg("select", undefined);
+const only = arg("regions", undefined)?.split(",");
+const label = arg("label", `week-${theme}`);
 mkdirSync(outDir, { recursive: true });
 
 // Regions in CSS px at 1440x900, from docs/re/tokens.md section 3.
@@ -48,6 +52,8 @@ const REGIONS = {
 	gutter: [240, 244, 72, 656],
 	grid: [312, 244, 844, 656],
 	contextPanel: [1156, 0, 284, 900],
+	// The editor's upper block: header, title, times, people, calendar (dark reference).
+	editor: [1156, 60, 284, 340],
 };
 // Areas that legitimately differ: the account avatar photo, and the macOS overlay scrollbar
 // the reference machine draws on the calendar list (system chrome, not app UI).
@@ -84,16 +90,17 @@ try {
 		? JSON.parse(readFileSync(snapshotPath, "utf8"))
 		: null;
 	await page.addInitScript(
-		([s, t, top]) => {
+		([s, t, top, sel]) => {
 			window.__SCHEDEE_SNAPSHOT__ = s;
 			window.__SCHEDEE_THEME__ = t;
 			if (top !== null) window.__SCHEDEE_SCROLL_TOP__ = Number(top);
+			if (sel !== null) window.__SCHEDEE_SELECT__ = sel;
 		},
-		[snapshot, theme, scrollTop ?? null],
+		[snapshot, theme, scrollTop ?? null, select ?? null],
 	);
 	await page.goto("http://localhost:4174/");
 	await page.waitForSelector("[data-schedee-ready]");
-	const shotPath = resolve(outDir, `week-${theme}.png`);
+	const shotPath = resolve(outDir, `${label}.png`);
 	await page.screenshot({ path: shotPath, scale: "device" });
 
 	if (!existsSync(referencePath)) {
@@ -131,7 +138,9 @@ try {
 		totalMismatchPct: +((100 * total) / (a.width * a.height)).toFixed(3),
 		regions: {},
 	};
-	for (const [name, [x, y, w, h]] of Object.entries(REGIONS)) {
+	for (const [name, [x, y, w, h]] of Object.entries(REGIONS).filter(([n]) =>
+		only ? only.includes(n) : n !== "editor",
+	)) {
 		let bad = 0;
 		for (let yy = Math.round(y * S); yy < Math.round((y + h) * S); yy++)
 			for (let xx = Math.round(x * S); xx < Math.round((x + w) * S); xx++) {

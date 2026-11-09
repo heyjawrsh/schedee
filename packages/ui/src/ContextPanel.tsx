@@ -1,4 +1,5 @@
 import { PanelRight, TextSearch } from "lucide-react";
+import type { ReactNode } from "react";
 
 const SHORTCUTS: [string, string[]][] = [
 	["Command menu", ["⌘", "K"]],
@@ -8,13 +9,16 @@ const SHORTCUTS: [string, string[]][] = [
 	["All keyboard shortcuts", ["?"]],
 ];
 
-export function ContextPanel() {
+/** Right-hand panel: the idle search and shortcuts, or `children` (the event editor) when given. */
+export function ContextPanel({ children }: { children?: ReactNode }) {
 	return (
 		<aside className="sch-panel">
-			<div className="sch-input" style={{ left: 8, top: 8, width: 232 }}>
-				<TextSearch className="sch-icon" size={18} strokeWidth={1.5} />
-				<span>Search events</span>
-			</div>
+			{!children && (
+				<div className="sch-input" style={{ left: 8, top: 8, width: 232 }}>
+					<TextSearch className="sch-icon" size={18} strokeWidth={1.5} />
+					<span>Search events</span>
+				</div>
+			)}
 			<button
 				type="button"
 				className="sch-iconbtn"
@@ -23,24 +27,26 @@ export function ContextPanel() {
 			>
 				<PanelRight className="sch-icon" size={18} strokeWidth={1.5} />
 			</button>
-			<div className="sch-shortcuts">
-				<div className="sch-shortcuts__head">Useful shortcuts</div>
-				{SHORTCUTS.map(([label, keys], i) => (
-					<div
-						key={label}
-						className={`sch-shortcuts__item${i === 0 ? " sch-shortcuts__item--first" : ""}`}
-					>
-						{label}
-						<span className="sch-keys">
-							{keys.map((k) => (
-								<kbd key={k} className="sch-kbd">
-									{k}
-								</kbd>
-							))}
-						</span>
-					</div>
-				))}
-			</div>
+			{children ?? (
+				<div className="sch-shortcuts">
+					<div className="sch-shortcuts__head">Useful shortcuts</div>
+					{SHORTCUTS.map(([label, keys], i) => (
+						<div
+							key={label}
+							className={`sch-shortcuts__item${i === 0 ? " sch-shortcuts__item--first" : ""}`}
+						>
+							{label}
+							<span className="sch-keys">
+								{keys.map((k) => (
+									<kbd key={k} className="sch-kbd">
+										{k}
+									</kbd>
+								))}
+							</span>
+						</div>
+					))}
+				</div>
+			)}
 		</aside>
 	);
 }

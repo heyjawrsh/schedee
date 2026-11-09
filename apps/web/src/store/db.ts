@@ -27,6 +27,8 @@ export interface LocalStore {
 	): () => void;
 	putEvent(e: CalendarEvent): Promise<void>;
 	deleteEvent(id: string): Promise<void>;
+	/** Applies an edit result (puts and removals) atomically. */
+	commit(r: { put: CalendarEvent[]; remove: string[] }): Promise<void>;
 }
 
 export function createLocalStore(
@@ -56,6 +58,12 @@ export function createLocalStore(
 		},
 		async putEvent(e) {
 			await db.events.put(e);
+		},
+		async commit({ put, remove }) {
+			await db.transaction("rw", db.events, async () => {
+				if (remove.length) await db.events.bulkDelete(remove);
+				if (put.length) await db.events.bulkPut(put);
+			});
 		},
 		async deleteEvent(id) {
 			await db.transaction("rw", db.events, async () => {

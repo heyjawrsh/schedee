@@ -1,6 +1,9 @@
 import {
+	applyDelete,
+	applyEdit,
 	type Calendar,
 	type CalendarSnapshot,
+	type EditResult,
 	expandEvents,
 	goTo,
 	initialView,
@@ -16,6 +19,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ContextPanel } from "./ContextPanel";
 import type { Theme } from "./chipColors";
 import { DaysView } from "./DaysView";
+import { EventPanel } from "./EventPanel";
 import { Header } from "./Header";
 import { MonthView } from "./MonthView";
 import { Sidebar } from "./Sidebar";
@@ -47,6 +51,9 @@ export interface SchedeeProps {
 	/** Initial grid scroll in px; defaults to bringing "now" into view. */
 	scrollTop?: number;
 	initialState?: ViewState;
+	/** Persist an edit. Without it the calendar is read-only. */
+	onCommit?: (result: EditResult) => void;
+	initialSelectedId?: string;
 }
 
 /** The app frame: sidebar, main view (day, N days, week or month) and context panel. */
@@ -55,6 +62,8 @@ export function Schedee({
 	theme,
 	scrollTop,
 	initialState,
+	onCommit,
+	initialSelectedId,
 }: SchedeeProps) {
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
@@ -86,8 +95,38 @@ export function Schedee({
 		[snapshot.events, snapshot.timeZone, first, last],
 	);
 
+	const [selectedId, setSelectedId] = useState<string | null>(
+		initialSelectedId ?? null,
+	);
+	const selected = instances.find((i) => i.id === selectedId) ?? null;
+	const selectedCal = selected ? calendars.get(selected.calendarId) : undefined;
+	const writable = useMemo(
+		() => [...calendars.values()].filter((c) => !c.subscribed),
+		[calendars],
+	);
+	const readOnly =
+		!onCommit ||
+		!selectedCal ||
+		!!selectedCal.subscribed ||
+		!!selected?.attendees?.some((a) => a.organizer && !a.self);
+
+	// A press on empty calendar space clears the selection (chips stop their own presses).
+	useEffect(() => {
+		const onDown = (e: PointerEvent) => {
+			const t = e.target as Element | null;
+			if (t?.closest(".sch-main") && !t.closest("[data-event-id]"))
+				setSelectedId(null);
+		};
+		addEventListener("pointerdown", onDown);
+		return () => removeEventListener("pointerdown", onDown);
+	}, []);
+
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
+			if (e.key === "Escape" && !isTyping(e.target)) {
+				setSelectedId(null);
+				return;
+			}
 			if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
 			const k = e.key.toLowerCase();
 			const update = (f: (v: ViewState) => ViewState) => {
@@ -140,6 +179,8 @@ export function Schedee({
 						now={now}
 						theme={theme}
 						onPickDay={(d) => setViewState((v) => goTo(setView(v, "day"), d))}
+						selectedId={selectedId ?? undefined}
+						onSelect={setSelectedId}
 					/>
 				) : (
 					<DaysView
@@ -151,10 +192,30 @@ export function Schedee({
 						timeZoneLabel={snapshot.timeZoneLabel}
 						theme={theme}
 						{...(scrollTop === undefined ? {} : { scrollTop })}
+						selectedId={selectedId ?? undefined}
+						onSelect={setSelectedId}
 					/>
 				)}
 			</main>
-			<ContextPanel />
+			<ContextPanel>
+				{selected && (
+					<EventPanel
+						key={selected.id}
+						instance={selected}
+						calendar={selectedCal}
+						writable={writable}
+						readOnly={readOnly}
+						theme={theme}
+						onChange={(patch, scope) =>
+							onCommit?.(applyEdit(snapshot.events, selected, patch, scope))
+						}
+						onDelete={(scope) => {
+							onCommit?.(applyDelete(snapshot.events, selected, scope));
+							setSelectedId(null);
+						}}
+					/>
+				)}
+			</ContextPanel>
 		</div>
 	);
 }

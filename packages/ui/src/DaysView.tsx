@@ -33,7 +33,7 @@ const ALLDAY_TOP = HEADER_HEIGHT + 28;
 /** Hours that get a line and a gutter label (midnight's line is the all-day border). */
 const HOURS = Array.from({ length: 23 }, (_, k) => k + 1);
 
-export interface DaysViewProps {
+export interface DaysViewProps extends Selectable {
 	/** The day columns to show, in order. */
 	days: Temporal.PlainDate[];
 	/** Width of the main area; day columns share it. */
@@ -64,16 +64,34 @@ function colorsFor(
 	return chipColors(cal?.color ?? "#B3B4B4", cal?.colorDark, theme, past);
 }
 
+interface Selectable {
+	selectedId?: string | undefined;
+	onSelect?: ((id: string) => void) | undefined;
+}
+
+/** Click selects; the handler stops the event so the grid behind never sees it. */
+const selectProps = (id: string, { selectedId, onSelect }: Selectable) => ({
+	"data-event-id": id,
+	"aria-selected": selectedId === id,
+	onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+	onClick: (e: React.MouseEvent) => {
+		e.stopPropagation();
+		onSelect?.(id);
+	},
+});
+
 function TimedChip({
 	p,
 	x,
 	areaWidth,
 	colors,
+	sel,
 }: {
 	p: TimedPlacement;
 	x: number;
 	areaWidth: number;
 	colors: ChipColors;
+	sel: Selectable;
 }) {
 	const height = Math.max(
 		CHIP_MIN_HEIGHT,
@@ -86,12 +104,18 @@ function TimedChip({
 		left: x + p.left * areaWidth,
 		width: p.width * areaWidth - CHIP_MARGIN_RIGHT,
 		height,
-		zIndex: 10 + p.z,
+		zIndex: sel.selectedId === p.event.id ? 40 : 10 + p.z,
 	};
-	const hatched = p.event.rsvp === "tentative" ? " sch-chip--hatched" : "";
+	const hatched =
+		(p.event.rsvp === "tentative" ? " sch-chip--hatched" : "") +
+		(sel.selectedId === p.event.id ? " sch-chip--selected" : "");
 	if (compact) {
 		return (
-			<div className={`sch-chip sch-chip--compact${hatched}`} style={style}>
+			<div
+				className={`sch-chip sch-chip--compact${hatched}`}
+				style={style}
+				{...selectProps(p.event.id, sel)}
+			>
 				<span className="sch-chip__title">{p.event.title}</span>
 				{height < ALLDAY_ROW && (
 					<span className="sch-chip__time">{formatTime(p.startMin)}</span>
@@ -101,7 +125,11 @@ function TimedChip({
 	}
 	const lines = Math.max(1, Math.floor((height - 4 - 13) / 13));
 	return (
-		<div className={`sch-chip${hatched}`} style={style}>
+		<div
+			className={`sch-chip${hatched}`}
+			style={style}
+			{...selectProps(p.event.id, sel)}
+		>
 			<div className="sch-chip__title" style={{ WebkitLineClamp: lines }}>
 				{p.event.rsvp === "needsAction" && <span className="sch-chip__dot" />}
 				{p.event.title}
@@ -185,7 +213,10 @@ export function DaysView({
 	timeZoneLabel,
 	theme,
 	scrollTop,
+	selectedId,
+	onSelect,
 }: DaysViewProps) {
+	const sel: Selectable = { selectedId, onSelect };
 	const today = now.toPlainDate();
 	const dayWidth = (width - COL0 + 2.5) / days.length;
 	const lastDay = days.at(-1) ?? today;
@@ -277,7 +308,8 @@ export function DaysView({
 				{allDay.map((p) => (
 					<div
 						key={p.event.id}
-						className="sch-chip sch-chip--allday"
+						className={`sch-chip sch-chip--allday${selectedId === p.event.id ? " sch-chip--selected" : ""}`}
+						{...selectProps(p.event.id, sel)}
 						style={{
 							...chipVars(
 								colorsFor(p.event, calendars, theme, isPast(p.event)),
@@ -377,6 +409,7 @@ export function DaysView({
 												theme,
 												isPast(c.event),
 											)}
+											sel={sel}
 										/>
 									);
 								})}
