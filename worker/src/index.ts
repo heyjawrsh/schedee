@@ -2,21 +2,14 @@
  * Stateless auth helper for the web build. It turns OAuth codes into tokens and refreshes them,
  * holding the client secret the browser must not see. It stores nothing and logs no bodies.
  */
+import { GOOGLE_AUTH, GOOGLE_SCOPES, GOOGLE_TOKEN } from "./google";
+
 export interface Env {
 	GOOGLE_WEB_CLIENT_ID: string;
 	GOOGLE_WEB_CLIENT_SECRET: string;
 	/** The app origin allowed to call the token endpoints and receive the sign-in result. */
 	APP_ORIGIN: string;
 }
-
-const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
-export const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
-export const GOOGLE_SCOPES = [
-	"openid",
-	"email",
-	"https://www.googleapis.com/auth/calendar.events",
-	"https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-];
 
 /** PKCE challenges and state values are base64url, 43 to 128 characters. */
 const B64URL = /^[A-Za-z0-9_-]{43,128}$/;

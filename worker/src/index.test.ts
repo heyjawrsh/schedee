@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import worker, { type Env, GOOGLE_TOKEN } from "./index";
+import { GOOGLE_TOKEN } from "./google";
+import worker, { type Env } from "./index";
 
 const ENV: Env = {
 	GOOGLE_WEB_CLIENT_ID: "client-id.apps.googleusercontent.com",
