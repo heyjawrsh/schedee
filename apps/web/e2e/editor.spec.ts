@@ -1,6 +1,10 @@
 import { expect, type Page, test } from "@playwright/test";
 
 const open = async (page: Page) => {
+	// Fixed scroll so the inserted early-morning events are on screen whatever the time.
+	await page.addInitScript(() => {
+		window.__SCHEDEE_SCROLL_TOP__ = 5 * 48;
+	});
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto("/");
 	await page.locator("[data-schedee-ready]").waitFor();

@@ -94,6 +94,67 @@ export function applyEdit(
 	return { put: [next], remove: [] };
 }
 
+/** Moves or resizes a displayed instance to a new start and end. Occurrences of a series get an override. */
+export function applyMove(
+	stored: CalendarEvent[],
+	instance: EventInstance,
+	start: string,
+	end: string,
+	scope: EditScope = "this",
+): EditResult {
+	return applyEdit(stored, instance, { start, end }, scope);
+}
+
+/** Copies a displayed instance as a new standalone event at `start`/`end` (defaults to the same time). */
+export function applyDuplicate(
+	instance: EventInstance,
+	id: string,
+	start = instance.start,
+	end = instance.end,
+): EditResult {
+	const {
+		recurrence: _r,
+		recurringEventId: _s,
+		originalStart: _o,
+		...rest
+	} = strip(instance);
+	return { put: [clean({ ...rest, id, start, end })], remove: [] };
+}
+
+/**
+ * The edit that reverses `result` when applied to the state after it. Pass the events as they were
+ * before `result` was committed.
+ */
+export function invertEdit(
+	before: CalendarEvent[],
+	result: EditResult,
+): EditResult {
+	const byId = new Map(before.map((e) => [e.id, e]));
+	const put: CalendarEvent[] = [];
+	const remove: string[] = [];
+	for (const e of result.put) {
+		const old = byId.get(e.id);
+		if (old) put.push(old);
+		else remove.push(e.id);
+	}
+	for (const id of result.remove) {
+		const old = byId.get(id);
+		if (old && !put.includes(old)) put.push(old);
+	}
+	return { put, remove };
+}
+
+/** Applies `result` to a list of stored events, the way a store commit would. */
+export function applyResult(
+	stored: CalendarEvent[],
+	result: EditResult,
+): CalendarEvent[] {
+	const byId = new Map(stored.map((e) => [e.id, e]));
+	for (const id of result.remove) byId.delete(id);
+	for (const e of result.put) byId.set(e.id, e);
+	return [...byId.values()];
+}
+
 /** Deletes a displayed instance: the whole event, one occurrence (EXDATE), or the whole series. */
 export function applyDelete(
 	stored: CalendarEvent[],

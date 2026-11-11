@@ -67,6 +67,8 @@ export interface EventPanelProps {
 	theme: "light" | "dark";
 	onChange: (patch: EventPatch, scope: EditScope) => void;
 	onDelete: (scope: EditScope) => void;
+	/** Put the cursor in the title, for an event that was just created. */
+	focusTitle?: boolean;
 }
 
 /** Text that commits on Enter or blur, and reverts on Escape. */
@@ -78,6 +80,7 @@ function Field({
 	multiline = false,
 	readOnly = false,
 	label,
+	focus = false,
 }: {
 	value: string;
 	placeholder?: string;
@@ -87,14 +90,20 @@ function Field({
 	multiline?: boolean;
 	readOnly?: boolean;
 	label: string;
+	focus?: boolean;
 }) {
 	const [draft, setDraft] = useState(value);
+	const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+	useEffect(() => {
+		if (focus) ref.current?.focus();
+	}, [focus]);
 	useEffect(() => setDraft(value), [value]);
 	const commit = () => {
 		if (draft === value) return;
 		if (onCommit(draft) === false) setDraft(value);
 	};
 	const props = {
+		ref,
 		className: `sch-field ${className}`,
 		value: draft,
 		placeholder,
@@ -203,6 +212,7 @@ export function EventPanel({
 	theme,
 	onChange,
 	onDelete,
+	focusTitle = false,
 }: EventPanelProps) {
 	const recurring = !!instance.occurrence;
 	const [scope, setScope] = useState<EditScope>("this");
@@ -339,6 +349,7 @@ export function EventPanel({
 				value={instance.title}
 				placeholder="New event"
 				multiline
+				focus={focusTitle}
 				readOnly={readOnly}
 				onCommit={(v) => (v.trim() ? change({ title: v.trim() }) : false)}
 			/>
