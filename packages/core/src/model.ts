@@ -22,6 +22,8 @@ export interface Account {
 	/** Usually the account email. */
 	label: string;
 	calendars: Calendar[];
+	/** Where the account syncs from. Absent for calendars that live only on this device. */
+	provider?: "google";
 }
 
 export type Rsvp = "accepted" | "tentative" | "needsAction" | "declined";

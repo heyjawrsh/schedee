@@ -98,4 +98,78 @@ describe("local store", () => {
 			"hidden",
 		);
 	});
+
+	it("keeps local hides on account refresh and drops vanished calendars", async () => {
+		const db = fresh();
+		const store = createLocalStore(seed, db);
+		await store.ready;
+		const cal = (id: string) => ({ id, name: id, color: "#000000" });
+		await store.upsertAccount({
+			id: "g",
+			label: "g",
+			provider: "google",
+			calendars: [cal("g/a"), cal("g/b")],
+		});
+		await store.setCalendarHidden("g/a", true);
+		await store.applySync(
+			{ calendarId: "g/b", accountId: "g", syncToken: "t1" },
+			{
+				put: [
+					{
+						id: "g/b#1",
+						calendarId: "g/b",
+						title: "B1",
+						start: "2026-11-10T09:00",
+						end: "2026-11-10T10:00",
+						allDay: false,
+					},
+				],
+				remove: [],
+			},
+		);
+		await store.upsertAccount({
+			id: "g",
+			label: "g",
+			provider: "google",
+			calendars: [cal("g/a")],
+		});
+		const account = await db.accounts.get("g");
+		expect(account?.calendars).toEqual([{ ...cal("g/a"), hidden: true }]);
+		expect(await db.events.get("g/b#1")).toBeUndefined();
+		expect(await store.getSyncState("g/b")).toBeUndefined();
+	});
+
+	it("resets a calendar on a full resync and removes everything with the account", async () => {
+		const db = fresh();
+		const store = createLocalStore(seed, db);
+		await store.ready;
+		await store.upsertAccount({
+			id: "g",
+			label: "g",
+			provider: "google",
+			calendars: [{ id: "g/a", name: "a", color: "#000000" }],
+		});
+		await store.putCredential({ accountId: "g", refreshToken: "r" });
+		const ev = (id: string) => ({
+			id,
+			calendarId: "g/a",
+			title: id,
+			start: "2026-11-10T09:00",
+			end: "2026-11-10T10:00",
+			allDay: false,
+		});
+		const state = { calendarId: "g/a", accountId: "g", syncToken: "t" };
+		await store.applySync(state, { put: [ev("old")], remove: [] });
+		await store.applySync(state, { put: [ev("new")], remove: [] }, true);
+		expect(
+			(await db.events.where("calendarId").equals("g/a").toArray()).map(
+				(e) => e.id,
+			),
+		).toEqual(["new"]);
+		await store.removeAccount("g");
+		expect(await db.accounts.get("g")).toBeUndefined();
+		expect(await db.events.where("calendarId").equals("g/a").count()).toBe(0);
+		expect(await store.getCredential("g")).toBeUndefined();
+		expect(await store.getSyncState("g/a")).toBeUndefined();
+	});
 });

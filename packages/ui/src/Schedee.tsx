@@ -76,6 +76,8 @@ export interface SchedeeProps {
 	onTheme?: (t: ThemeChoice) => void;
 	/** Hide or show a calendar. Without it the command menu leaves calendars out. */
 	onCalendarVisibility?: (calendarId: string, hidden: boolean) => void;
+	/** Start connecting a Google account. Without it the menu doesn't offer one. */
+	onAddAccount?: () => void;
 }
 
 /** The app frame: sidebar, main view (day, N days, week or month) and context panel. */
@@ -89,6 +91,7 @@ export function Schedee({
 	themeChoice,
 	onTheme,
 	onCalendarVisibility,
+	onAddAccount,
 }: SchedeeProps) {
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
@@ -259,6 +262,7 @@ export function Schedee({
 		createEvent: canCreate ? createNow : undefined,
 		calendars: [...calendars.values()],
 		onCalendarVisibility,
+		onAddAccount,
 		theme: themeChoice,
 		onTheme,
 	});

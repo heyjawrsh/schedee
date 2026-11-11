@@ -23,6 +23,7 @@ export interface CommandContext {
 	onCalendarVisibility?: ((id: string, hidden: boolean) => void) | undefined;
 	theme?: ThemeChoice | undefined;
 	onTheme?: ((t: ThemeChoice) => void) | undefined;
+	onAddAccount?: (() => void) | undefined;
 }
 
 const UNIT: Record<ViewState["kind"], string> = {
@@ -133,6 +134,18 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 			})),
 		});
 	}
+
+	if (c.onAddAccount)
+		groups.push({
+			label: "Accounts",
+			items: [
+				{
+					id: "add-google",
+					label: "Add Google Calendar account",
+					run: c.onAddAccount,
+				},
+			],
+		});
 
 	const views: CommandItem[] = [];
 	if (c.view.kind !== "day")

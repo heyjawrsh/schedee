@@ -1,0 +1,166 @@
+import {
+	type Account,
+	type CalendarEvent,
+	type GoogleCalendarListEntry,
+	type GoogleEvent,
+	mapGoogleCalendar,
+	mapGoogleEvent,
+} from "@schedee/core";
+import type { LocalStore } from "../../store/db";
+import { refreshGoogle } from "./auth";
+
+const API = "https://www.googleapis.com/calendar/v3";
+/** Refresh a little before the access token runs out. */
+const EARLY_MS = 60_000;
+
+export class GoogleApiError extends Error {
+	constructor(
+		readonly status: number,
+		message: string,
+	) {
+		super(message);
+	}
+}
+
+/** A fetch for one account that adds the access token and refreshes it when needed. */
+export function googleFetcher(
+	store: LocalStore,
+	accountId: string,
+	authUrl: string,
+) {
+	const token = async (force = false) => {
+		const cred = await store.getCredential(accountId);
+		if (!cred) throw new GoogleApiError(401, "not signed in");
+		if (
+			!force &&
+			cred.accessToken &&
+			(cred.expiresAt ?? 0) - EARLY_MS > Date.now()
+		)
+			return cred.accessToken;
+		const fresh = await refreshGoogle(authUrl, cred.refreshToken);
+		await store.putCredential({
+			...cred,
+			accessToken: fresh.accessToken,
+			expiresAt: fresh.expiresAt,
+			// Google may rotate the refresh token.
+			refreshToken: fresh.refreshToken ?? cred.refreshToken,
+		});
+		return fresh.accessToken;
+	};
+	return async <T>(
+		path: string,
+		params: Record<string, string> = {},
+	): Promise<T> => {
+		const url = `${API}${path}?${new URLSearchParams(params)}`;
+		const go = async (force: boolean) =>
+			fetch(url, {
+				headers: { Authorization: `Bearer ${await token(force)}` },
+			});
+		let res = await go(false);
+		if (res.status === 401) res = await go(true);
+		if (!res.ok) throw new GoogleApiError(res.status, await res.text());
+		return (await res.json()) as T;
+	};
+}
+
+type Fetcher = ReturnType<typeof googleFetcher>;
+
+interface Page<T> {
+	items?: T[];
+	nextPageToken?: string;
+	nextSyncToken?: string;
+	timeZone?: string;
+}
+
+async function listAll<T>(
+	get: Fetcher,
+	path: string,
+	params: Record<string, string>,
+) {
+	const items: T[] = [];
+	let page: Page<T> = {};
+	do {
+		page = await get<Page<T>>(path, {
+			...params,
+			...(page.nextPageToken ? { pageToken: page.nextPageToken } : {}),
+		});
+		items.push(...(page.items ?? []));
+	} while (page.nextPageToken);
+	return { items, nextSyncToken: page.nextSyncToken, timeZone: page.timeZone };
+}
+
+/** Refreshes the account's calendar list, then pulls every calendar's changes since last time. */
+export async function syncGoogleAccount(
+	store: LocalStore,
+	account: Pick<Account, "id" | "label">,
+	authUrl: string,
+): Promise<{ calendars: number; changed: number }> {
+	const get = googleFetcher(store, account.id, authUrl);
+	const { items: entries } = await listAll<GoogleCalendarListEntry>(
+		get,
+		"/users/me/calendarList",
+		{ maxResults: "250" },
+	);
+	const live = entries.filter((c) => !c.deleted);
+	await store.upsertAccount({
+		id: account.id,
+		label: account.label,
+		provider: "google",
+		calendars: live.map((c) => mapGoogleCalendar(c, account.id)),
+	});
+
+	let changed = 0;
+	for (const entry of live) {
+		const calendarId = mapGoogleCalendar(entry, account.id).id;
+		changed += await syncCalendar(store, get, account.id, calendarId, entry);
+	}
+	return { calendars: live.length, changed };
+}
+
+async function syncCalendar(
+	store: LocalStore,
+	get: Fetcher,
+	accountId: string,
+	calendarId: string,
+	entry: GoogleCalendarListEntry,
+): Promise<number> {
+	const path = `/calendars/${encodeURIComponent(entry.id)}/events`;
+	const prior = await store.getSyncState(calendarId);
+	const pull = (syncToken?: string) =>
+		listAll<GoogleEvent>(get, path, {
+			maxResults: "2500",
+			showDeleted: "true",
+			...(syncToken ? { syncToken } : {}),
+		});
+
+	let reset = !prior?.syncToken;
+	let result: Awaited<ReturnType<typeof pull>>;
+	try {
+		result = await pull(prior?.syncToken);
+	} catch (e) {
+		// The server forgot our place: start this calendar over.
+		if (!(e instanceof GoogleApiError) || e.status !== 410) throw e;
+		reset = true;
+		result = await pull();
+	}
+
+	const zone = result.timeZone ?? entry.timeZone ?? "UTC";
+	const put: CalendarEvent[] = [];
+	const remove: string[] = [];
+	for (const g of result.items) {
+		const e = mapGoogleEvent(g, calendarId, zone);
+		if (e) put.push(e);
+		else remove.push(`${calendarId}#${g.id}`);
+	}
+	await store.applySync(
+		{
+			calendarId,
+			accountId,
+			...(result.nextSyncToken ? { syncToken: result.nextSyncToken } : {}),
+			syncedAt: Date.now(),
+		},
+		{ put, remove },
+		reset,
+	);
+	return put.length + remove.length;
+}

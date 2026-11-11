@@ -6,6 +6,7 @@ import {
 import { Schedee, type Theme, type ThemeChoice } from "@schedee/ui";
 import { useEffect, useState } from "react";
 import { demoSeed } from "./demo";
+import { addGoogleAccount, SYNC_EVERY_MS, syncAll } from "./providers/accounts";
 import { createLocalStore, type LocalStore } from "./store/db";
 
 declare global {
@@ -78,9 +79,16 @@ function useLiveSnapshot(
 		setStore(s);
 		const off = s.subscribe(setData);
 		const tick = setInterval(() => setNow(nowIso()), 30_000);
+		// Synced accounts: pull on start, on a timer, and when the window comes back.
+		const pull = () => void s.ready.then(() => syncAll(s));
+		pull();
+		const timer = setInterval(pull, SYNC_EVERY_MS);
+		addEventListener("focus", pull);
 		return () => {
 			off();
 			clearInterval(tick);
+			clearInterval(timer);
+			removeEventListener("focus", pull);
 		};
 	}, [enabled]);
 	return [
@@ -109,6 +117,10 @@ export function App() {
 						onCommit: (r: EditResult) => void store.commit(r),
 						onCalendarVisibility: (id: string, hidden: boolean) =>
 							void store.setCalendarHidden(id, hidden),
+						onAddAccount: () =>
+							void addGoogleAccount(store).catch((e: unknown) =>
+								console.warn("Adding the Google account failed:", e),
+							),
 					}
 				: {})}
 			{...(window.__SCHEDEE_SCROLL_TOP__ === undefined
