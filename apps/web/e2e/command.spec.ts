@@ -34,7 +34,11 @@ test("typing filters, and Enter runs the active command", async ({ page }) => {
 	await open(page);
 	await page.keyboard.press("ControlOrMeta+k");
 	await page.keyboard.type("month view");
-	await expect(menu(page).getByRole("option")).toHaveCount(1);
+	await expect(option(page, "Display month view")).toHaveAttribute(
+		"aria-selected",
+		"true",
+	);
+	await expect(option(page, /Search events for/)).toBeVisible();
 	await page.keyboard.press("Enter");
 	await expect(menu(page)).toHaveCount(0);
 	await expect(page.locator("[data-view]")).toHaveAttribute(

@@ -13,6 +13,7 @@ import {
 	goTo,
 	initialView,
 	invertEdit,
+	searchEvents,
 	setView,
 	step,
 	Temporal,
@@ -30,6 +31,7 @@ import { DaysView } from "./DaysView";
 import { EventPanel } from "./EventPanel";
 import { Header } from "./Header";
 import { MonthView } from "./MonthView";
+import { BackToSearch, SearchField, SearchResults } from "./Search";
 import { Sidebar } from "./Sidebar";
 
 /** Main-area size, measured before paint so the first frame is already laid out. */
@@ -50,6 +52,9 @@ function useSize(fallback: { width: number; height: number }) {
 }
 
 const newId = () => crypto.randomUUID();
+/** How far back and ahead search looks for occurrences of repeating events. */
+const SEARCH_YEARS_BACK = 5;
+const SEARCH_YEARS_AHEAD = 2;
 /** Undo depth. */
 const HISTORY = 100;
 
@@ -217,11 +222,40 @@ export function Schedee({
 	};
 	const canCreate = !!onCommit && !!defaultCalendar;
 
+	// Search: the query lives here so results survive opening an event from them.
+	const [query, setQuery] = useState("");
+	const searchInput = useRef<HTMLInputElement>(null);
+	const [focusSearch, setFocusSearch] = useState(0);
+	useEffect(() => {
+		if (focusSearch) searchInput.current?.focus();
+	}, [focusSearch]);
+	const startSearch = (q?: string) => {
+		setSelectedId(null);
+		if (q !== undefined) setQuery(q);
+		setFocusSearch((n) => n + 1);
+	};
+	const results = useMemo(
+		() =>
+			query.trim()
+				? searchEvents(
+						events,
+						query,
+						{
+							start: today.subtract({ years: SEARCH_YEARS_BACK }),
+							end: today.add({ years: SEARCH_YEARS_AHEAD }),
+						},
+						snapshot.timeZone,
+					)
+				: [],
+		[events, query, today, snapshot.timeZone],
+	);
+
 	const [menu, setMenu] = useState<{ start?: string } | null>(null);
 	const commands = buildCommands({
 		view,
 		today,
 		setView: setViewState,
+		search: () => startSearch(),
 		createEvent: canCreate ? createNow : undefined,
 		calendars: [...calendars.values()],
 		onCalendarVisibility,
@@ -238,8 +272,12 @@ export function Schedee({
 		duplicate,
 		commit,
 		createNow: canCreate ? createNow : null,
+		query,
+		startSearch,
 	});
 	actions.current = {
+		query,
+		startSearch,
 		selected,
 		readOnly,
 		undo,
@@ -268,13 +306,20 @@ export function Schedee({
 				return;
 			}
 			if (isTyping(e.target)) return;
-			if (e.key === "Escape") {
-				setSelectedId(null);
-				return;
-			}
 			const k = e.key.toLowerCase();
 			const a = actions.current;
+			if (e.key === "Escape") {
+				// First the open event, then the search.
+				if (a.selected) setSelectedId(null);
+				else if (a.query) setQuery("");
+				return;
+			}
 			if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+				if (k === "f") {
+					e.preventDefault();
+					a.startSearch();
+					return;
+				}
 				if (k === "z" || k === "y") {
 					e.preventDefault();
 					if (k === "y" || e.shiftKey) a.redo();
@@ -311,6 +356,9 @@ export function Schedee({
 			} else if (k === ".") {
 				e.preventDefault();
 				setMenu({ start: "goto-date" });
+			} else if (k === "/") {
+				e.preventDefault();
+				a.startSearch();
 			} else if (k === "j" || k === "arrowright") update((v) => step(v, 1));
 			else if (k === "k" || k === "arrowleft") update((v) => step(v, -1));
 		};
@@ -378,8 +426,22 @@ export function Schedee({
 					/>
 				)}
 			</main>
-			<ContextPanel>
-				{selected && (
+			<ContextPanel
+				header={
+					selected ? (
+						query.trim() ? (
+							<BackToSearch onBack={() => setSelectedId(null)} />
+						) : null
+					) : (
+						<SearchField
+							query={query}
+							onQuery={setQuery}
+							inputRef={searchInput}
+						/>
+					)
+				}
+			>
+				{selected ? (
 					<EventPanel
 						key={selected.id}
 						instance={selected}
@@ -396,13 +458,27 @@ export function Schedee({
 							setSelectedId(null);
 						}}
 					/>
-				)}
+				) : query.trim() ? (
+					<SearchResults
+						results={results}
+						now={now}
+						calendars={calendars}
+						theme={theme}
+						onPick={(e) => {
+							setViewState((v) =>
+								goTo(v, Temporal.PlainDate.from(e.start.slice(0, 10))),
+							);
+							setSelectedId(e.id);
+						}}
+					/>
+				) : undefined}
 			</ContextPanel>
 			{menu && (
 				<CommandMenu
 					groups={commands}
 					startWith={menu.start}
 					onClose={() => setMenu(null)}
+					onSearch={startSearch}
 				/>
 			)}
 		</div>

@@ -43,4 +43,5 @@ export {
 } from "./navigation";
 export { formatDuration, parseDate, parseTime } from "./parse";
 export { describeRule, type RulePreset, rulePresets } from "./rules";
+export { matchesQuery, searchEvents } from "./search";
 export { type DayOfWeek, type WeekRange, weekOf } from "./week";

@@ -17,6 +17,8 @@ export interface CommandContext {
 	setView: (f: (v: ViewState) => ViewState) => void;
 	/** Creates an event now; absent when nothing is writable. */
 	createEvent?: (() => void) | undefined;
+	/** Puts the cursor in the search field. */
+	search?: (() => void) | undefined;
 	calendars: Calendar[];
 	onCalendarVisibility?: ((id: string, hidden: boolean) => void) | undefined;
 	theme?: ThemeChoice | undefined;
@@ -83,6 +85,17 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 				keys: ["K"],
 				run: () => c.setView((v) => step(v, -1)),
 			},
+			...(c.search
+				? [
+						{
+							id: "search",
+							label: "Search events",
+							keys: ["/"],
+							orKeys: ["⌘", "F"],
+							run: c.search,
+						},
+					]
+				: []),
 		],
 	});
 

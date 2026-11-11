@@ -26,9 +26,14 @@
 	--surface-sidebar: #f8f8f7;
 	--surface-panel: #ffffff;
 	--surface-popover: #ffffff;
-	/* command menu: inferred for light, no light capture yet */
-	--surface-cmdk: #ffffff;
-	--scrim: rgba(0, 0, 0, 0.16);
+	/* command menu */
+	--surface-cmdk: rgba(255, 255, 255, 0.8);
+	--scrim: rgba(0, 0, 0, 0.12);
+	--surface-cmdk-kbd: rgba(84, 72, 49, 0.08);
+	--shadow-cmdk:
+		0 24px 48px -8px rgba(0, 0, 0, 0.24), 0 4px 12px -1px rgba(0, 0, 0, 0.12);
+	/* search field hover ring: inferred for light */
+	--ring-input-hover: rgba(0, 0, 0, 0.1);
 	--shadow-lg:
 		0 24px 48px -8px rgba(0, 0, 0, 0.24), 0 4px 12px -1px rgba(0, 0, 0, 0.12);
 	--surface-input: rgba(0, 0, 0, 0.04);
@@ -69,7 +74,11 @@
 	--surface-panel: #191919;
 	--surface-popover: #252525;
 	--surface-cmdk: #1f1f1f;
-	--scrim: rgba(0, 0, 0, 0.25);
+	--scrim: rgba(0, 0, 0, 0.24);
+	--surface-cmdk-kbd: rgba(255, 255, 255, 0.055);
+	--shadow-cmdk:
+		0 24px 48px -8px rgba(0, 0, 0, 0.48), 0 4px 12px -1px rgba(0, 0, 0, 0.24);
+	--ring-input-hover: rgba(255, 255, 255, 0.13);
 	--shadow-lg:
 		0 24px 48px -8px rgba(0, 0, 0, 0.48), 0 4px 12px -1px rgba(0, 0, 0, 0.24);
 	--surface-input: rgba(255, 255, 255, 0.05);

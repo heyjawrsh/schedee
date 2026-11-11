@@ -43,11 +43,13 @@ Day, N-day and month views share the week view's kit. They are checked structura
 
 `pnpm fidelity -- --theme dark --snapshot <fixture> --reference <editor capture> --select <event id> --regions editor` diffs the editor panel's upper block (header, title, times, people, calendar) against a capture of the reference's read-only editor: **0.179%** mismatched pixels. The rest of that frame differs on purpose (the reference had scrolled its week), so only the panel region counts.
 
-### Command menu (M2d)
+### Command menu and search (M2d)
 
-`pnpm fidelity -- --theme dark --snapshot <fixture> --reference <menu capture> --press Meta+k --regions cmdkInput,cmdkFooter` opens the menu before the screenshot and diffs its input row (**0.851%**) and footer (**0.554%**). Most of what remains is icon shape (Lucide) and glyph anti-aliasing. The list is compared by eye only: the reference lists scheduling and Notion commands Schedee leaves out, so its rows sit at different heights. Label, row and keycap metrics match within a pixel.
+`pnpm fidelity -- --theme dark --snapshot <fixture> --reference <menu capture> --press Meta+k --regions cmdkInput,cmdkFooter` opens the menu before the screenshot and diffs its input row (**0.851%**) and footer (**0.601%**). Most of what remains is icon shape (Lucide) and glyph anti-aliasing. The list is compared by eye only: the reference lists scheduling and Notion commands Schedee leaves out, so its rows sit at different heights. Label, row and keycap metrics match within a pixel.
 
-Measured: the panel is 680 by 490, 200px from the top and centred on the window, with a 1px inside border and 12px corners. Rows are 36px, inset 8px, with 6px corners. Group labels are 12px, rows 14px, the input 17px. The backdrop dims the whole window by about a quarter. The light theme has no capture yet, so its panel and scrim colours are inferred.
+Measured: the panel is 680 wide, 200px from the top and centred on the window, with a 1px inside border, 12px corners and a two-layer shadow (stronger in dark). Light uses 80% white over the scrim. Rows are 36px, weight 500, inset 8px, with 6px corners. Group labels are 12px, rows 14px, the input 17px. The scrim is black at 24% in dark and 12% in light.
+
+Search results are compared by eye against a capture of the reference searching the maintainer's calendar (`--press / --type <query>` renders ours): day headings, the red Today heading, bar, title, time and duration land within a pixel. Results run oldest first and open scrolled to Today; past ones are drawn at half opacity. The search field is transparent at rest, gets a 1px inside ring on hover and the input fill when focused.
 
 ## Known differences
 

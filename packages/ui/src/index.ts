@@ -16,4 +16,9 @@ export * from "./geometry";
 export { Header, type HeaderProps } from "./Header";
 export { MonthView, type MonthViewProps } from "./MonthView";
 export { Schedee, type SchedeeProps } from "./Schedee";
+export {
+	BackToSearch,
+	SearchField,
+	SearchResults,
+} from "./Search";
 export { Sidebar } from "./Sidebar";

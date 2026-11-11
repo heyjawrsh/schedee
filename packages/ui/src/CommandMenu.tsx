@@ -37,6 +37,8 @@ export interface CommandMenuProps {
 	onClose: () => void;
 	/** Open straight into this command's sub-list or prompt. */
 	startWith?: string | undefined;
+	/** Offer "Search events for …" for whatever is typed. */
+	onSearch?: ((query: string) => void) | undefined;
 }
 
 const ROOT_PLACEHOLDER = "Type a command...";
@@ -71,7 +73,12 @@ function Keys({ keys }: { keys: string[] }) {
 }
 
 /** The ⌘K command menu: a filterable list of commands with sub-lists and text prompts. */
-export function CommandMenu({ groups, onClose, startWith }: CommandMenuProps) {
+export function CommandMenu({
+	groups,
+	onClose,
+	startWith,
+	onSearch,
+}: CommandMenuProps) {
 	const root: Page = {
 		kind: "list",
 		groups,
@@ -101,6 +108,17 @@ export function CommandMenu({ groups, onClose, startWith }: CommandMenuProps) {
 					}))
 					.filter((g) => g.items.length > 0)
 			: [];
+	if (onSearch && stack.length === 1 && query.trim())
+		visible.push({
+			label: "Search",
+			items: [
+				{
+					id: "search-for",
+					label: `Search events for “${query.trim()}”`,
+					run: () => onSearch(query.trim()),
+				},
+			],
+		});
 	const flat = visible.flatMap((g) => g.items);
 	const activeItem = flat[Math.min(active, flat.length - 1)];
 

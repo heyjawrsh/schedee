@@ -40,6 +40,8 @@ const outDir = arg("out", resolve(repo, ".re/fidelity"));
 const select = arg("select", undefined);
 // Optional: a key to press once the app is ready, e.g. "Meta+k" for the command menu.
 const press = arg("press", undefined);
+// Optional: text to type after that key, e.g. --press / --type standup for search results.
+const typed = arg("type", undefined);
 const only = arg("regions", undefined)?.split(",");
 const label = arg("label", `week-${theme}`);
 mkdirSync(outDir, { recursive: true });
@@ -110,7 +112,8 @@ try {
 	await page.waitForSelector("[data-schedee-ready]");
 	if (press) {
 		await page.keyboard.press(press);
-		await page.waitForTimeout(100);
+		if (typed) await page.keyboard.type(typed);
+		await page.waitForTimeout(150);
 	}
 	const shotPath = resolve(outDir, `${label}.png`);
 	await page.screenshot({ path: shotPath, scale: "device" });
