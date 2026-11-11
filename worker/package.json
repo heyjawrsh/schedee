@@ -4,7 +4,7 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"dev": "wrangler dev",
+		"dev": "varlock-wrangler dev",
 		"build": "wrangler deploy --dry-run --outdir dist",
 		"typecheck": "tsc -p tsconfig.json",
 		"test": "vitest run"
@@ -14,5 +14,10 @@
 		"typescript": "7.0.2",
 		"vitest": "5.1.0",
 		"wrangler": "4.158.0"
+	},
+	"dependencies": {
+		"@varlock/1password-plugin": "2.0.5",
+		"@varlock/cloudflare-integration": "1.6.2",
+		"varlock": "1.23.0"
 	}
 }
