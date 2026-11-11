@@ -83,7 +83,7 @@ export function mapGoogleCalendar(
 	entry: GoogleCalendarListEntry,
 	accountId: string,
 ): Calendar {
-	return clean({
+	return clean<Calendar>({
 		id: googleCalendarKey(accountId, entry.id),
 		name: entry.summaryOverride ?? entry.summary,
 		color: entry.backgroundColor ?? "#B3B4B4",
@@ -177,10 +177,14 @@ function conferenceOf(e: GoogleEvent): Conference | undefined {
 }
 
 /** Removes undefined fields so stored records stay small and comparable. */
-function clean<T extends object>(o: T): T {
-	for (const k of Object.keys(o) as (keyof T)[])
-		if (o[k] === undefined) delete o[k];
-	return o;
+function clean<T extends object>(
+	o: {
+		[K in keyof T]?: T[K] | undefined;
+	},
+): T {
+	const out = { ...o } as Record<string, unknown>;
+	for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k];
+	return out as T;
 }
 
 /**
@@ -214,7 +218,7 @@ export function mapGoogleEvent(
 
 	const self = e.attendees?.find((a) => a.self);
 	const attendees: Attendee[] | undefined = e.attendees?.map((a) =>
-		clean({
+		clean<Attendee>({
 			email: a.email ?? "",
 			name: a.displayName,
 			rsvp: rsvpOf(a.responseStatus),
@@ -227,7 +231,7 @@ export function mapGoogleEvent(
 		? undefined
 		: e.reminders?.overrides?.map((r) => r.minutes);
 
-	return clean({
+	return clean<CalendarEvent>({
 		id,
 		calendarId: calendarKey,
 		title: e.summary ?? "",
