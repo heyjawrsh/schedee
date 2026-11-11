@@ -29,6 +29,7 @@ export interface LocalStore {
 	deleteEvent(id: string): Promise<void>;
 	/** Applies an edit result (puts and removals) atomically. */
 	commit(r: { put: CalendarEvent[]; remove: string[] }): Promise<void>;
+	setCalendarHidden(calendarId: string, hidden: boolean): Promise<void>;
 }
 
 export function createLocalStore(
@@ -63,6 +64,23 @@ export function createLocalStore(
 			await db.transaction("rw", db.events, async () => {
 				if (remove.length) await db.events.bulkDelete(remove);
 				if (put.length) await db.events.bulkPut(put);
+			});
+		},
+		async setCalendarHidden(calendarId, hidden) {
+			await db.transaction("rw", db.accounts, async () => {
+				const all = await db.accounts.toArray();
+				const owner = all.find((a) =>
+					a.calendars.some((c) => c.id === calendarId),
+				);
+				if (!owner) return;
+				await db.accounts.put({
+					...owner,
+					calendars: owner.calendars.map((c) => {
+						if (c.id !== calendarId) return c;
+						const { hidden: _h, ...rest } = c;
+						return hidden ? { ...rest, hidden: true } : rest;
+					}),
+				});
 			});
 		},
 		async deleteEvent(id) {

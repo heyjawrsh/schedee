@@ -9,16 +9,26 @@ const SHORTCUTS: [string, string[]][] = [
 	["All keyboard shortcuts", ["?"]],
 ];
 
-/** Right-hand panel: the idle search and shortcuts, or `children` (the event editor) when given. */
-export function ContextPanel({ children }: { children?: ReactNode }) {
+/**
+ * Right-hand panel. `header` fills the top-left slot (the search field, or a way back to results);
+ * `children` replaces the shortcuts (the event editor, or search results).
+ */
+export function ContextPanel({
+	children,
+	header,
+}: {
+	children?: ReactNode;
+	header?: ReactNode;
+}) {
 	return (
 		<aside className="sch-panel">
-			{!children && (
-				<div className="sch-input" style={{ left: 8, top: 8, width: 232 }}>
-					<TextSearch className="sch-icon" size={18} strokeWidth={1.5} />
-					<span>Search events</span>
-				</div>
-			)}
+			{header ??
+				(!children && (
+					<div className="sch-input" style={{ left: 8, top: 8, width: 232 }}>
+						<TextSearch className="sch-icon" size={18} strokeWidth={1.5} />
+						<span>Search events</span>
+					</div>
+				))}
 			<button
 				type="button"
 				className="sch-iconbtn"
