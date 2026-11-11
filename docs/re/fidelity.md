@@ -39,6 +39,10 @@ Every grid line, hour line, column edge and the all-day border land on the refer
 
 Day, N-day and month views share the week view's kit. They are checked structurally (geometry measured from the reference month and day captures) but not pixel-diffed, because no private fixture covers the six weeks the month capture shows.
 
+### Event editor (M2b)
+
+`pnpm fidelity -- --theme dark --snapshot <fixture> --reference <editor capture> --select <event id> --regions editor` diffs the editor panel's upper block (header, title, times, people, calendar) against a capture of the reference's read-only editor: **0.179%** mismatched pixels. The rest of that frame differs on purpose (the reference had scrolled its week), so only the panel region counts.
+
 ## Known differences
 
 - **Icons.** Schedee uses Lucide icons, not the reference's. This is deliberate and accounts for most of the sidebar, toolbar and panel residue.

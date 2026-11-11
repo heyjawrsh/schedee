@@ -834,6 +834,329 @@
 	color: var(--text-secondary);
 }
 
+/* ---------------------------------------------------------------- selection */
+.sch-chip--selected {
+	background: var(--chip-bar);
+	--chip-title: #ffffff;
+	--chip-time: rgba(255, 255, 255, 0.8);
+	z-index: 40;
+}
+.sch-chip,
+.sch-mitem {
+	cursor: default;
+}
+
+/* ---------------------------------------------------------------- event panel */
+.sch-ep {
+	position: absolute;
+	top: 77px;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	overflow-y: auto;
+	padding-bottom: 24px;
+	font-size: 13px;
+	line-height: 18px;
+	color: var(--text-primary);
+	user-select: text;
+}
+.sch-ep__head {
+	position: relative;
+	height: 30px;
+	padding-left: 16px;
+	display: flex;
+	align-items: center;
+	font-weight: 500;
+}
+.sch-ep__head > .sch-menuwrap {
+	position: absolute;
+	right: 10px;
+	top: 0;
+}
+.sch-ep__more {
+	position: static;
+}
+fieldset.sch-ep__scope,
+fieldset.sch-ep__rsvp {
+	border: 0;
+	min-inline-size: 0;
+}
+.sch-ep__scope {
+	margin: 8px 8px 0;
+	display: flex;
+	padding: 2px;
+	border-radius: 8px;
+	background: var(--surface-input);
+}
+.sch-ep__scope > button {
+	flex: 1;
+	height: 24px;
+	border-radius: 6px;
+	font-size: 12px;
+	color: var(--text-secondary);
+}
+.sch-ep__scope > button[aria-pressed="true"] {
+	background: var(--surface-panel);
+	color: var(--text-primary);
+	box-shadow: inset 0 0 0 1px var(--border-divider);
+}
+.sch-field {
+	all: unset;
+	box-sizing: border-box;
+	font: inherit;
+	color: var(--text-primary);
+	border-radius: 6px;
+	height: 30px;
+	padding: 0 8px;
+}
+.sch-field::placeholder {
+	color: var(--text-tertiary);
+}
+.sch-field:not([readonly]):hover {
+	background: var(--state-hover);
+}
+.sch-field:not([readonly]):focus {
+	background: var(--surface-input);
+	box-shadow: inset 0 0 0 1px var(--border-divider);
+}
+.sch-ep__title {
+	display: block;
+	margin: 14px 8px 0;
+	width: calc(100% - 16px);
+	height: auto;
+	padding: 0 8px;
+	resize: none;
+	field-sizing: content;
+	min-height: 18px;
+	white-space: pre-wrap;
+}
+.sch-ep__divider {
+	height: 1px;
+	margin: 14px 0 8px;
+	background: var(--border-divider);
+}
+.sch-ep__section + .sch-ep__divider {
+	margin-top: 8px;
+}
+.sch-ep__row {
+	position: relative;
+	min-height: 30px;
+	margin-bottom: 2px;
+	padding-left: 42px;
+	padding-right: 8px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+.sch-ep__icon {
+	position: absolute;
+	left: 16px;
+	top: 6px;
+	width: 18px;
+	height: 18px;
+	color: var(--icon-tertiary);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.sch-ep__start {
+	position: absolute;
+	left: 8px;
+	width: 97px;
+	padding-left: 34px;
+}
+.sch-ep__arrow {
+	position: absolute;
+	left: 118px;
+	top: 7px;
+	color: var(--icon-tertiary);
+}
+.sch-ep__endwrap {
+	position: absolute;
+	left: 109px;
+	right: 8px;
+	display: flex;
+	align-items: center;
+}
+.sch-ep__end {
+	padding-left: 34px;
+	field-sizing: content;
+	min-width: 40px;
+	max-width: 110px;
+}
+.sch-ep__dur {
+	margin-left: -4px;
+	white-space: nowrap;
+}
+.sch-ep__date {
+	position: absolute;
+	left: 34px;
+	width: 97px;
+}
+.sch-ep__date--allday {
+	left: 8px;
+	width: 140px;
+	padding-left: 34px;
+}
+.sch-ep__toggles {
+	gap: 18px;
+}
+.sch-ep__link {
+	display: inline-flex;
+	gap: 4px;
+	color: var(--text-secondary);
+	cursor: default;
+}
+.sch-ep__link:not(:disabled):hover {
+	color: var(--text-primary);
+}
+.sch-ep__link[aria-pressed="true"],
+.sch-ep__link--plain,
+.sch-ep__link--value {
+	color: var(--text-primary);
+}
+.sch-ep__link--static {
+	opacity: 0.6;
+}
+.sch-ep__row .sch-ep__link > span:first-child {
+	color: var(--text-primary);
+}
+.sch-ep__muted {
+	color: var(--text-secondary);
+}
+.sch-ep__faint {
+	color: var(--text-tertiary);
+}
+.sch-ep__small {
+	font-size: 12px;
+	line-height: 16px;
+}
+.sch-ep__people,
+.sch-ep__person {
+	padding-top: 3px;
+	padding-bottom: 3px;
+	align-items: flex-start;
+}
+.sch-ep__people .sch-ep__icon {
+	top: 9px;
+}
+.sch-ep__avatar {
+	position: absolute;
+	left: 16px;
+	top: 6px;
+	width: 18px;
+	height: 18px;
+	border-radius: 50%;
+	background: var(--surface-kbd);
+	color: var(--text-secondary);
+	font-size: 9px;
+	font-weight: 600;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+.sch-ep__avatar::after {
+	content: "";
+	position: absolute;
+	right: -2px;
+	bottom: -2px;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	border: 1.5px solid var(--surface-panel);
+	box-sizing: border-box;
+	background: var(--text-tertiary);
+}
+.sch-ep__avatar--accepted::after {
+	background: #3fb950;
+}
+.sch-ep__avatar--declined::after {
+	background: var(--accent);
+}
+.sch-ep__avatar--tentative::after {
+	background: #d4a72c;
+}
+.sch-ep__name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	max-width: 210px;
+}
+.sch-ep__rsvp {
+	margin: 4px 8px 6px 44px;
+	display: flex;
+	gap: 1px;
+	padding: 2px;
+	border-radius: 8px;
+	background: var(--surface-input);
+	width: fit-content;
+}
+.sch-ep__rsvp > button {
+	width: 59px;
+	height: 26px;
+	border-radius: 6px;
+	font-weight: 500;
+}
+.sch-ep__rsvp > button[aria-pressed="true"] {
+	background: linear-gradient(
+		to bottom,
+		var(--surface-button-top),
+		var(--surface-button-bottom)
+	);
+	box-shadow: inset 0 0 0 1px var(--border-divider);
+}
+.sch-ep__addrow {
+	margin-top: 4px;
+}
+.sch-ep__add,
+.sch-ep__inline {
+	position: absolute;
+	left: 34px;
+	right: 8px;
+}
+.sch-ep__conf {
+	color: var(--text-primary);
+	text-decoration: none;
+	display: inline-flex;
+	gap: 6px;
+}
+.sch-ep__desc {
+	display: block;
+	margin: 0 8px;
+	width: calc(100% - 16px);
+	min-height: 30px;
+	height: auto;
+	padding: 6px 8px;
+	field-sizing: content;
+	resize: none;
+}
+.sch-ep__swatch {
+	width: 13px;
+	height: 13px;
+	border-radius: 3px;
+}
+.sch-ep__pair {
+	gap: 0;
+}
+.sch-ep__pair > :first-child {
+	width: 98px;
+	justify-content: flex-start;
+}
+.sch-ep__chip {
+	height: 22px;
+	padding: 0 8px;
+	border-radius: 6px;
+	background: var(--surface-input);
+	font-size: 12px;
+}
+.sch-menu--left {
+	left: 0;
+	right: auto;
+}
+.sch-menu__item--danger {
+	color: var(--accent);
+}
+
 /* ---------------------------------------------------------------- context panel */
 .sch-panel {
 	position: relative;

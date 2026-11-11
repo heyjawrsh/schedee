@@ -51,6 +51,30 @@ export interface CalendarEvent {
 	status?: "confirmed" | "cancelled";
 	location?: string;
 	description?: string;
+	createdBy?: string;
+	attendees?: Attendee[];
+	conference?: Conference;
+	visibility?: "default" | "public" | "private";
+	/** Minutes before start. */
+	reminders?: number[];
+}
+
+export interface Attendee {
+	email: string;
+	name?: string;
+	rsvp?: Rsvp;
+	organizer?: boolean;
+	/** The signed-in user. */
+	self?: boolean;
+	/** Rooms and other resources. */
+	resource?: boolean;
+}
+
+export interface Conference {
+	kind: "zoom" | "meet" | "teams" | "other";
+	url: string;
+	/** Meeting ID or short label shown next to the provider name. */
+	label?: string;
 }
 
 export interface Recurrence {
@@ -64,6 +88,8 @@ export interface Recurrence {
 export interface EventInstance extends CalendarEvent {
 	/** The series (or single event) this instance comes from. */
 	sourceId: string;
+	/** For occurrences of a series: the original start key (series format and zone). */
+	occurrence?: string;
 }
 
 /** A static snapshot of everything the week view needs to render. */

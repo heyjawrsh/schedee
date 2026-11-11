@@ -32,6 +32,8 @@ export interface MonthViewProps {
 	now: Temporal.PlainDateTime;
 	theme: Theme;
 	onPickDay?: (d: Temporal.PlainDate) => void;
+	selectedId?: string | undefined;
+	onSelect?: ((id: string) => void) | undefined;
 }
 
 const vars = (bar: string, bg: string, title: string, time: string) =>
@@ -52,7 +54,17 @@ export function MonthView({
 	now,
 	theme,
 	onPickDay,
+	selectedId,
+	onSelect,
 }: MonthViewProps) {
+	const pick = (id: string) => ({
+		"data-event-id": id,
+		"aria-selected": selectedId === id,
+		onClick: (e: React.MouseEvent) => {
+			e.stopPropagation();
+			onSelect?.(id);
+		},
+	});
 	const today = now.toPlainDate();
 	const colW = (width - WEEKNUM_COL + 0.5) / 7;
 	const rowH = (height - GRID_TOP) / 6;
@@ -171,7 +183,8 @@ export function MonthView({
 								return (
 									<div
 										key={p.event.id}
-										className="sch-chip sch-chip--allday"
+										className={`sch-chip sch-chip--allday${selectedId === p.event.id ? " sch-chip--selected" : ""}`}
+										{...pick(p.event.id)}
 										style={{
 											...vars(c.bar, c.bg, c.title, c.time),
 											top: CELL_PAD_TOP + p.row * SLOT,
@@ -194,7 +207,8 @@ export function MonthView({
 										return (
 											<div
 												key={e.id}
-												className={`sch-mitem${past ? " sch-mitem--past" : ""}`}
+												className={`sch-mitem${past ? " sch-mitem--past" : ""}${selectedId === e.id ? " sch-mitem--selected" : ""}`}
+												{...pick(e.id)}
 												style={{
 													...vars(c.bar, c.bg, c.title, c.time),
 													top: CELL_PAD_TOP + slot * SLOT,
