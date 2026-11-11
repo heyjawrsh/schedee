@@ -3,7 +3,7 @@ import {
 	type EditResult,
 	Temporal,
 } from "@schedee/core";
-import { Schedee, type Theme } from "@schedee/ui";
+import { Schedee, type Theme, type ThemeChoice } from "@schedee/ui";
 import { useEffect, useState } from "react";
 import { demoSeed } from "./demo";
 import { createLocalStore, type LocalStore } from "./store/db";
@@ -28,18 +28,38 @@ const zoneLabel =
 const nowIso = () =>
 	Temporal.Now.plainDateTimeISO().toString({ smallestUnit: "second" });
 
-function useTheme(): Theme {
-	const [theme, setTheme] = useState<Theme>(
-		() => window.__SCHEDEE_THEME__ ?? systemTheme(),
-	);
+const THEME_KEY = "schedee.theme";
+const readChoice = (): ThemeChoice => {
+	try {
+		const v = localStorage.getItem(THEME_KEY);
+		return v === "light" || v === "dark" ? v : "system";
+	} catch {
+		return "system";
+	}
+};
+
+/** The theme in effect, the saved choice, and a setter that remembers it on this device. */
+function useTheme(): [Theme, ThemeChoice, (t: ThemeChoice) => void] {
+	const [choice, setChoice] = useState<ThemeChoice>(readChoice);
+	const [system, setSystem] = useState<Theme>(systemTheme);
 	useEffect(() => {
-		if (window.__SCHEDEE_THEME__) return;
 		const mq = matchMedia("(prefers-color-scheme: dark)");
-		const onChange = () => setTheme(systemTheme());
+		const onChange = () => setSystem(systemTheme());
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
-	return theme;
+	const choose = (t: ThemeChoice) => {
+		setChoice(t);
+		try {
+			if (t === "system") localStorage.removeItem(THEME_KEY);
+			else localStorage.setItem(THEME_KEY, t);
+		} catch {
+			// Storage can be unavailable (private windows); the choice still lasts this session.
+		}
+	};
+	const theme =
+		window.__SCHEDEE_THEME__ ?? (choice === "system" ? system : choice);
+	return [theme, choice, choose];
 }
 
 /** Live data: the local store, plus a clock that ticks every 30 seconds. */
@@ -72,7 +92,7 @@ function useLiveSnapshot(
 export function App() {
 	const injected = window.__SCHEDEE_SNAPSHOT__ ?? null;
 	const [live, store] = useLiveSnapshot(!injected);
-	const theme = useTheme();
+	const [theme, themeChoice, setThemeChoice] = useTheme();
 	const snapshot = injected ?? live;
 	if (!snapshot) return null;
 	return (
@@ -82,8 +102,14 @@ export function App() {
 			{...(window.__SCHEDEE_SELECT__
 				? { initialSelectedId: window.__SCHEDEE_SELECT__ }
 				: {})}
+			themeChoice={themeChoice}
+			onTheme={setThemeChoice}
 			{...(store && !injected
-				? { onCommit: (r: EditResult) => void store.commit(r) }
+				? {
+						onCommit: (r: EditResult) => void store.commit(r),
+						onCalendarVisibility: (id: string, hidden: boolean) =>
+							void store.setCalendarHidden(id, hidden),
+					}
 				: {})}
 			{...(window.__SCHEDEE_SCROLL_TOP__ === undefined
 				? {}

@@ -38,6 +38,8 @@ const referencePath = arg(
 const outDir = arg("out", resolve(repo, ".re/fidelity"));
 // Optional: preselect an event (opens the editor) and limit the report to some regions.
 const select = arg("select", undefined);
+// Optional: a key to press once the app is ready, e.g. "Meta+k" for the command menu.
+const press = arg("press", undefined);
 const only = arg("regions", undefined)?.split(",");
 const label = arg("label", `week-${theme}`);
 mkdirSync(outDir, { recursive: true });
@@ -54,7 +56,13 @@ const REGIONS = {
 	contextPanel: [1156, 0, 284, 900],
 	// The editor's upper block: header, title, times, people, calendar (dark reference).
 	editor: [1156, 60, 284, 340],
+	// The command menu's input row and footer (dark reference). Its rows hold commands Schedee
+	// doesn't have (scheduling, Notion), so the list itself is compared by eye.
+	cmdkInput: [380, 200, 680, 48],
+	cmdkFooter: [380, 656, 680, 34],
 };
+// Regions that only mean something for a specific state; reported only when asked for.
+const OPT_IN = ["editor", "cmdkInput", "cmdkFooter"];
 // Areas that legitimately differ: the account avatar photo, and the macOS overlay scrollbar
 // the reference machine draws on the calendar list (system chrome, not app UI).
 const MASKS = [
@@ -100,6 +108,10 @@ try {
 	);
 	await page.goto("http://localhost:4174/");
 	await page.waitForSelector("[data-schedee-ready]");
+	if (press) {
+		await page.keyboard.press(press);
+		await page.waitForTimeout(100);
+	}
 	const shotPath = resolve(outDir, `${label}.png`);
 	await page.screenshot({ path: shotPath, scale: "device" });
 
@@ -139,7 +151,7 @@ try {
 		regions: {},
 	};
 	for (const [name, [x, y, w, h]] of Object.entries(REGIONS).filter(([n]) =>
-		only ? only.includes(n) : n !== "editor",
+		only ? only.includes(n) : !OPT_IN.includes(n),
 	)) {
 		let bad = 0;
 		for (let yy = Math.round(y * S); yy < Math.round((y + h) * S); yy++)

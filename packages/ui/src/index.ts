@@ -2,8 +2,14 @@
 import "./tokens.css";
 import "./week.css";
 
+export {
+	type CommandGroup,
+	type CommandItem,
+	CommandMenu,
+} from "./CommandMenu";
 export { ContextPanel } from "./ContextPanel";
 export { type ChipColors, chipColors, type Theme } from "./chipColors";
+export { buildCommands, type ThemeChoice } from "./commands";
 export { DaysView, type DaysViewProps } from "./DaysView";
 export { formatRange, formatTime } from "./format";
 export * from "./geometry";

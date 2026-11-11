@@ -86,4 +86,16 @@ describe("local store", () => {
 			(await next(store, (s) => s.events.map((e) => e.id))).sort(),
 		).toEqual(["a"]);
 	});
+
+	it("hides and shows a calendar", async () => {
+		const db = fresh();
+		const store = createLocalStore(seed, db);
+		await store.ready;
+		await store.setCalendarHidden("personal", true);
+		expect((await db.accounts.get("local"))?.calendars[0]?.hidden).toBe(true);
+		await store.setCalendarHidden("personal", false);
+		expect((await db.accounts.get("local"))?.calendars[0]).not.toHaveProperty(
+			"hidden",
+		);
+	});
 });

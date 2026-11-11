@@ -22,8 +22,10 @@ import {
 	weekOf,
 } from "@schedee/core";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { CommandMenu } from "./CommandMenu";
 import { ContextPanel } from "./ContextPanel";
 import type { Theme } from "./chipColors";
+import { buildCommands, type ThemeChoice } from "./commands";
 import { DaysView } from "./DaysView";
 import { EventPanel } from "./EventPanel";
 import { Header } from "./Header";
@@ -64,6 +66,11 @@ export interface SchedeeProps {
 	/** Persist an edit. Without it the calendar is read-only. */
 	onCommit?: (result: EditResult) => void;
 	initialSelectedId?: string;
+	/** The saved theme preference, for the command menu. */
+	themeChoice?: ThemeChoice;
+	onTheme?: (t: ThemeChoice) => void;
+	/** Hide or show a calendar. Without it the command menu leaves calendars out. */
+	onCalendarVisibility?: (calendarId: string, hidden: boolean) => void;
 }
 
 /** The app frame: sidebar, main view (day, N days, week or month) and context panel. */
@@ -74,6 +81,9 @@ export function Schedee({
 	initialState,
 	onCommit,
 	initialSelectedId,
+	themeChoice,
+	onTheme,
+	onCalendarVisibility,
 }: SchedeeProps) {
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
@@ -196,9 +206,48 @@ export function Schedee({
 		setFocusTitle(id);
 	};
 
+	/** A one-hour event from the next quarter hour today, or 9 AM on the first visible day. */
+	const createNow = () => {
+		const showsToday = days.some((d) => d.equals(today));
+		const next = Math.ceil((now.hour * 60 + now.minute + 1) / 15) * 15;
+		const start = showsToday
+			? today.toPlainDateTime().add({ minutes: next })
+			: first.toPlainDateTime({ hour: 9 });
+		create(start.toString(), start.add({ hours: 1 }).toString());
+	};
+	const canCreate = !!onCommit && !!defaultCalendar;
+
+	const [menu, setMenu] = useState<{ start?: string } | null>(null);
+	const commands = buildCommands({
+		view,
+		today,
+		setView: setViewState,
+		createEvent: canCreate ? createNow : undefined,
+		calendars: [...calendars.values()],
+		onCalendarVisibility,
+		theme: themeChoice,
+		onTheme,
+	});
+
 	// Keyboard actions read the latest render through this ref.
-	const actions = useRef({ selected, readOnly, undo, redo, duplicate, commit });
-	actions.current = { selected, readOnly, undo, redo, duplicate, commit };
+	const actions = useRef({
+		selected,
+		readOnly,
+		undo,
+		redo,
+		duplicate,
+		commit,
+		createNow: canCreate ? createNow : null,
+	});
+	actions.current = {
+		selected,
+		readOnly,
+		undo,
+		redo,
+		duplicate,
+		commit,
+		createNow: canCreate ? createNow : null,
+	};
 
 	// A press on empty calendar space clears the selection (chips stop their own presses).
 	useEffect(() => {
@@ -213,6 +262,11 @@ export function Schedee({
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
+			if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+				e.preventDefault();
+				setMenu((m) => (m ? null : {}));
+				return;
+			}
 			if (isTyping(e.target)) return;
 			if (e.key === "Escape") {
 				setSelectedId(null);
@@ -251,7 +305,13 @@ export function Schedee({
 			else if (k === "m") update((v) => setView(v, "month"));
 			else if (/^[2-9]$/.test(k)) update((v) => setView(v, "days", Number(k)));
 			else if (k === "t") update((v) => goTo(v, today));
-			else if (k === "j" || k === "arrowright") update((v) => step(v, 1));
+			else if (k === "c" && a.createNow) {
+				e.preventDefault();
+				a.createNow();
+			} else if (k === ".") {
+				e.preventDefault();
+				setMenu({ start: "goto-date" });
+			} else if (k === "j" || k === "arrowright") update((v) => step(v, 1));
 			else if (k === "k" || k === "arrowleft") update((v) => step(v, -1));
 		};
 		addEventListener("keydown", onKey);
@@ -338,6 +398,13 @@ export function Schedee({
 					/>
 				)}
 			</ContextPanel>
+			{menu && (
+				<CommandMenu
+					groups={commands}
+					startWith={menu.start}
+					onClose={() => setMenu(null)}
+				/>
+			)}
 		</div>
 	);
 }
