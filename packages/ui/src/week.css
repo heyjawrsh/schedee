@@ -846,6 +846,58 @@
 	cursor: default;
 }
 
+/* ---------------------------------------------------------------- drag */
+.sch-grid {
+	-webkit-user-select: none;
+	user-select: none;
+}
+.sch-chip__handle {
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 0;
+	height: 4px;
+	cursor: row-resize;
+	z-index: 1;
+}
+.sch-chip__handle--end {
+	top: auto;
+	bottom: 0;
+}
+/* the original stays put, dimmed, while its copy moves */
+.sch-chip--ghost {
+	opacity: 0.5;
+}
+.sch-chip--drag,
+.sch-chip--resize {
+	pointer-events: none;
+	--chip-time: #ffffff;
+}
+.sch-chip--drag {
+	background: color-mix(in srgb, var(--chip-bar) 75%, transparent);
+	box-shadow:
+		0 24px 48px -8px rgba(0, 0, 0, 0.48),
+		0 4px 12px -1px rgba(0, 0, 0, 0.24);
+}
+.sch-chip--drag::before {
+	background: transparent;
+}
+.sch-chip--resize {
+	box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.16);
+}
+/* outlines the whole slot the moving event will land in */
+.sch-dropring {
+	position: absolute;
+	left: 0;
+	box-sizing: border-box;
+	border-radius: 6px;
+	pointer-events: none;
+	z-index: 46;
+	box-shadow:
+		0 4px 12px -2px rgba(0, 0, 0, 0.16),
+		inset 0 0 0 1.5px var(--chip-bar);
+}
+
 /* ---------------------------------------------------------------- event panel */
 .sch-ep {
 	position: absolute;

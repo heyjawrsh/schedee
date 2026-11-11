@@ -1,6 +1,12 @@
 import { Temporal } from "temporal-polyfill";
 import { describe, expect, it } from "vitest";
-import { applyDelete, applyEdit } from "./edit";
+import {
+	applyDelete,
+	applyDuplicate,
+	applyEdit,
+	applyMove,
+	invertEdit,
+} from "./edit";
 import { expandEvents } from "./expand";
 import type { CalendarEvent } from "./model";
 
@@ -117,5 +123,73 @@ describe("applyDelete", () => {
 		);
 		const out = commit(stored, applyDelete(stored, tue(stored), "all"));
 		expect(out.map((e) => e.id)).toEqual(["x"]);
+	});
+});
+
+describe("drag edits and undo", () => {
+	const inst = (stored: CalendarEvent[], prefix: string) => {
+		const i = expandEvents(stored, week, CHI).find((x) =>
+			x.start.startsWith(prefix),
+		);
+		if (!i) throw new Error(`no instance at ${prefix}`);
+		return i;
+	};
+
+	it("moving an occurrence writes an override and undo restores the series", () => {
+		const before = [series];
+		const r = applyMove(
+			before,
+			inst(before, "2026-11-11"),
+			"2026-11-11T14:00:00",
+			"2026-11-11T14:15:00",
+		);
+		const after = commit(before, r);
+		expect(show(after)).toContain("11-11T14:00 Standup");
+		expect(show(after)).not.toContain("11-11T10:15 Standup");
+		const undone = commit(after, invertEdit(before, r));
+		expect(show(undone)).toEqual(show(before));
+	});
+
+	it("duplicates as a standalone event and undo removes the copy", () => {
+		const before = [series, single];
+		const r = applyDuplicate(
+			inst(before, "2026-11-12"),
+			"copy",
+			"2026-11-12T16:00:00",
+			"2026-11-12T16:15:00",
+		);
+		expect(r.put[0]).not.toHaveProperty("recurrence");
+		expect(r.put[0]).not.toHaveProperty("recurringEventId");
+		const after = commit(before, r);
+		expect(show(after)).toContain("11-12T16:00 Standup");
+		expect(show(after)).toContain("11-12T10:15 Standup");
+		expect(commit(after, invertEdit(before, r))).toEqual(before);
+	});
+
+	it("undo of a delete puts the event back", () => {
+		const before = [single];
+		const r = applyDelete(before, inst(before, "2026-11-10"));
+		const after = commit(before, r);
+		expect(after).toEqual([]);
+		expect(commit(after, invertEdit(before, r))).toEqual(before);
+	});
+
+	it("undo of an occurrence delete drops the EXDATE", () => {
+		const before = [series];
+		const r = applyDelete(before, inst(before, "2026-11-13"));
+		const after = commit(before, r);
+		expect(show(after)).not.toContain("11-13T10:15 Standup");
+		expect(show(commit(after, invertEdit(before, r)))).toEqual(show(before));
+	});
+
+	it("resizing a single event keeps its id", () => {
+		const before = [single];
+		const r = applyMove(
+			before,
+			inst(before, "2026-11-10"),
+			single.start,
+			"2026-11-10T11:30",
+		);
+		expect(r.put).toEqual([{ ...single, end: "2026-11-10T11:30" }]);
 	});
 });

@@ -1,12 +1,18 @@
 import {
 	applyDelete,
+	applyDuplicate,
 	applyEdit,
+	applyMove,
+	applyResult,
 	type Calendar,
+	type CalendarEvent,
 	type CalendarSnapshot,
 	type EditResult,
+	type EventInstance,
 	expandEvents,
 	goTo,
 	initialView,
+	invertEdit,
 	setView,
 	step,
 	Temporal,
@@ -40,6 +46,10 @@ function useSize(fallback: { width: number; height: number }) {
 	}, []);
 	return [ref, size] as const;
 }
+
+const newId = () => crypto.randomUUID();
+/** Undo depth. */
+const HISTORY = 100;
 
 const isTyping = (t: EventTarget | null) =>
 	t instanceof HTMLElement &&
@@ -85,15 +95,56 @@ export function Schedee({
 	const days = visibleDays(view);
 	const first = days[0] ?? today;
 	const last = days.at(-1) ?? today;
+	// Commits show at once; the overlay drops when the store sends back new events.
+	const [optimistic, setOptimistic] = useState<{
+		base: CalendarEvent[];
+		events: CalendarEvent[];
+	} | null>(null);
+	const events =
+		optimistic?.base === snapshot.events ? optimistic.events : snapshot.events;
+	const eventsRef = useRef(events);
+	eventsRef.current = events;
+
 	const instances = useMemo(
 		() =>
 			expandEvents(
-				snapshot.events,
+				events,
 				{ start: first, end: last.add({ days: 1 }) },
 				snapshot.timeZone,
 			),
-		[snapshot.events, snapshot.timeZone, first, last],
+		[events, snapshot.timeZone, first, last],
 	);
+
+	const past = useRef<{ forward: EditResult; back: EditResult }[]>([]);
+	const future = useRef<{ forward: EditResult; back: EditResult }[]>([]);
+	const send = (r: EditResult) => {
+		if (!onCommit) return;
+		const current = eventsRef.current;
+		const next = applyResult(current, r);
+		eventsRef.current = next;
+		setOptimistic({ base: snapshot.events, events: next });
+		onCommit(r);
+	};
+	/** Commits an edit and records it for undo. */
+	const commit = (r: EditResult) => {
+		if (!onCommit) return;
+		past.current.push({ forward: r, back: invertEdit(eventsRef.current, r) });
+		if (past.current.length > HISTORY) past.current.shift();
+		future.current = [];
+		send(r);
+	};
+	const undo = () => {
+		const entry = past.current.pop();
+		if (!entry) return;
+		future.current.push(entry);
+		send(entry.back);
+	};
+	const redo = () => {
+		const entry = future.current.pop();
+		if (!entry) return;
+		past.current.push(entry);
+		send(entry.forward);
+	};
 
 	const [selectedId, setSelectedId] = useState<string | null>(
 		initialSelectedId ?? null,
@@ -104,11 +155,50 @@ export function Schedee({
 		() => [...calendars.values()].filter((c) => !c.subscribed),
 		[calendars],
 	);
-	const readOnly =
-		!onCommit ||
-		!selectedCal ||
-		!!selectedCal.subscribed ||
-		!!selected?.attendees?.some((a) => a.organizer && !a.self);
+	/** Subscribed calendars and events someone else organizes can't be changed here. */
+	const canEdit = (i: EventInstance) => {
+		const cal = calendars.get(i.calendarId);
+		return (
+			!!onCommit &&
+			!!cal &&
+			!cal.subscribed &&
+			!i.attendees?.some((a) => a.organizer && !a.self)
+		);
+	};
+	const readOnly = !selected || !canEdit(selected);
+	const defaultCalendar =
+		writable.find((c) => c.isDefault && !c.hidden) ?? writable[0];
+	const [focusTitle, setFocusTitle] = useState<string | null>(null);
+
+	const duplicate = (i: EventInstance, start?: string, end?: string) => {
+		const id = newId();
+		commit(applyDuplicate(i, id, start, end));
+		setSelectedId(id);
+	};
+	const create = (start: string, end: string) => {
+		if (!defaultCalendar) return;
+		const id = newId();
+		commit({
+			put: [
+				{
+					id,
+					calendarId: defaultCalendar.id,
+					title: "",
+					start,
+					end,
+					allDay: false,
+					timeZone: snapshot.timeZone,
+				},
+			],
+			remove: [],
+		});
+		setSelectedId(id);
+		setFocusTitle(id);
+	};
+
+	// Keyboard actions read the latest render through this ref.
+	const actions = useRef({ selected, readOnly, undo, redo, duplicate, commit });
+	actions.current = { selected, readOnly, undo, redo, duplicate, commit };
 
 	// A press on empty calendar space clears the selection (chips stop their own presses).
 	useEffect(() => {
@@ -123,12 +213,35 @@ export function Schedee({
 
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape" && !isTyping(e.target)) {
+			if (isTyping(e.target)) return;
+			if (e.key === "Escape") {
 				setSelectedId(null);
 				return;
 			}
-			if (e.metaKey || e.ctrlKey || e.altKey || isTyping(e.target)) return;
 			const k = e.key.toLowerCase();
+			const a = actions.current;
+			if ((e.metaKey || e.ctrlKey) && !e.altKey) {
+				if (k === "z" || k === "y") {
+					e.preventDefault();
+					if (k === "y" || e.shiftKey) a.redo();
+					else a.undo();
+				} else if (k === "d" && a.selected && !a.readOnly) {
+					e.preventDefault();
+					a.duplicate(a.selected);
+				}
+				return;
+			}
+			if (
+				(e.key === "Backspace" || e.key === "Delete") &&
+				a.selected &&
+				!a.readOnly
+			) {
+				e.preventDefault();
+				a.commit(applyDelete(eventsRef.current, a.selected));
+				setSelectedId(null);
+				return;
+			}
+			if (e.metaKey || e.ctrlKey || e.altKey) return;
 			const update = (f: (v: ViewState) => ViewState) => {
 				e.preventDefault();
 				setViewState(f);
@@ -194,6 +307,14 @@ export function Schedee({
 						{...(scrollTop === undefined ? {} : { scrollTop })}
 						selectedId={selectedId ?? undefined}
 						onSelect={setSelectedId}
+						canEdit={canEdit}
+						onMove={(i, start, end, copy) =>
+							copy
+								? duplicate(i, start, end)
+								: commit(applyMove(eventsRef.current, i, start, end))
+						}
+						onCreate={onCommit && defaultCalendar ? create : undefined}
+						newCalendarId={defaultCalendar?.id}
 					/>
 				)}
 			</main>
@@ -206,11 +327,12 @@ export function Schedee({
 						writable={writable}
 						readOnly={readOnly}
 						theme={theme}
+						focusTitle={focusTitle === selected.id}
 						onChange={(patch, scope) =>
-							onCommit?.(applyEdit(snapshot.events, selected, patch, scope))
+							commit(applyEdit(eventsRef.current, selected, patch, scope))
 						}
 						onDelete={(scope) => {
-							onCommit?.(applyDelete(snapshot.events, selected, scope));
+							commit(applyDelete(eventsRef.current, selected, scope));
 							setSelectedId(null);
 						}}
 					/>

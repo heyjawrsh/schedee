@@ -1,10 +1,14 @@
 export { Temporal } from "temporal-polyfill";
 export {
 	applyDelete,
+	applyDuplicate,
 	applyEdit,
+	applyMove,
+	applyResult,
 	type EditResult,
 	type EditScope,
 	type EventPatch,
+	invertEdit,
 	overrideId,
 } from "./edit";
 export { convertZone, type DateRange, expandEvents } from "./expand";
