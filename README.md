@@ -38,6 +38,23 @@ pnpm lint
 | `worker`        | Stateless Cloudflare Worker for OAuth token exchange         |
 | `docs/re`       | Measurements taken from the reference app                    |
 
+### Connecting a Google account in development
+
+Without this the app runs on built-in demo calendars. To sync a real Google account you need your own Google OAuth clients and the auth Worker running locally.
+
+1. In [Google Cloud console](https://console.cloud.google.com/projectcreate), create a project and [enable the Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com).
+2. Under [Audience](https://console.cloud.google.com/auth/audience), choose External, keep it in Testing and add yourself as a test user. Under [Data Access](https://console.cloud.google.com/auth/scopes), add `calendar.events`, `calendar.calendarlist.readonly`, `openid` and `email`.
+3. Under [Clients](https://console.cloud.google.com/auth/clients), create a **Web application** client with JavaScript origin `http://localhost:5173` and redirect URI `http://localhost:8787/oauth/google/callback`. Copy the secret when it's shown; Google won't show it again.
+4. Create `worker/.env.local` (gitignored) with `GOOGLE_WEB_CLIENT_ID=...` and `GOOGLE_WEB_CLIENT_SECRET=...`. The variables are described in `worker/.env.schema`, which [Varlock](https://varlock.dev) validates; you can also point them at a secret manager, e.g. 1Password with `op(op://vault/item/field)`.
+5. Run the Worker and the app side by side:
+
+```sh
+pnpm --filter @schedee/worker dev   # auth Worker on http://localhost:8787
+pnpm dev                            # web app on http://localhost:5173
+```
+
+Then press ⌘K in the app and choose **Add Google Calendar account**. While the Google project is in Testing, Google asks you to sign in again every 7 days.
+
 ## License
 
 [AGPL-3.0](LICENSE). If you run a modified Schedee as a service, you share your changes.
