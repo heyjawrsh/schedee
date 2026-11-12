@@ -59,6 +59,8 @@ Edits to synced events go back to Google. Each one is queued on the device with 
 
 If an account's sign-in expires or is revoked, a warning shows next to it in the sidebar with **Sign in again** (also in ⌘K). Its calendars stay on screen and queued edits wait until you're back. Refused edits show as a short note under the account.
 
+To remove an account, press ⌘K and choose **Remove account**. It clears that account's calendars, events, unsent edits and sign-in from this device (and the keychain on desktop). Nothing changes in Google.
+
 #### Desktop
 
 The desktop app signs in through your default browser and keeps the refresh token in the system keychain. It talks to Google directly, so it doesn't need the Worker.

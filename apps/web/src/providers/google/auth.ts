@@ -72,8 +72,31 @@ export class GoogleAuthError extends Error {
 	}
 }
 
+/** How long a request to Google or the auth Worker may take before it counts as no connection. */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
+/**
+ * `fetch` that gives up after REQUEST_TIMEOUT_MS. A request with no answer fails the way a lost
+ * connection does (TypeError), so callers wait and retry instead of hanging.
+ */
+export async function fetchWithTimeout(
+	url: string,
+	init: RequestInit = {},
+): Promise<Response> {
+	try {
+		return await fetch(url, {
+			...init,
+			signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+		});
+	} catch (e) {
+		if (e instanceof DOMException && e.name === "TimeoutError")
+			throw new TypeError(`No answer from ${new URL(url).host}`);
+		throw e;
+	}
+}
+
 const post = async (url: string, body: unknown): Promise<TokenResponse> => {
-	const res = await fetch(url, {
+	const res = await fetchWithTimeout(url, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
 		body: JSON.stringify(body),

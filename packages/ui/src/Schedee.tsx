@@ -81,6 +81,8 @@ export interface SchedeeProps {
 	onAddAccount?: () => void;
 	/** Sign an account in again after its sign-in expired. */
 	onReconnect?: (accountId: string) => void;
+	/** Remove a synced account from this device. Without it the menu doesn't offer to. */
+	onRemoveAccount?: (accountId: string) => void;
 	/** Clear an account's "changes weren't saved" notice. */
 	onDismissDropped?: (accountId: string) => void;
 }
@@ -98,6 +100,7 @@ export function Schedee({
 	onCalendarVisibility,
 	onAddAccount,
 	onReconnect,
+	onRemoveAccount,
 	onDismissDropped,
 }: SchedeeProps) {
 	useEffect(() => {
@@ -272,6 +275,8 @@ export function Schedee({
 		onAddAccount,
 		signedOut: snapshot.accounts.filter((a) => a.problem === "signed_out"),
 		onReconnect,
+		removable: snapshot.accounts.filter((a) => a.provider),
+		onRemoveAccount,
 		theme: themeChoice,
 		onTheme,
 	});

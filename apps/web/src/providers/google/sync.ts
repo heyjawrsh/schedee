@@ -7,7 +7,12 @@ import {
 	mapGoogleEvent,
 } from "@schedee/core";
 import type { LocalStore } from "../../store/db";
-import { GoogleAuthError, type GoogleTokens, refreshGoogle } from "./auth";
+import {
+	fetchWithTimeout,
+	GoogleAuthError,
+	type GoogleTokens,
+	refreshGoogle,
+} from "./auth";
 import { desktopRefresh } from "./desktop";
 
 const API = "https://www.googleapis.com/calendar/v3";
@@ -44,7 +49,8 @@ export function googleFetcher(
 			fresh = await refreshGoogle(authUrl, cred.refreshToken);
 		else throw new GoogleAuthError("not_signed_in");
 		const refreshToken = fresh.refreshToken ?? cred.refreshToken;
-		await store.putCredential({
+		// Only refreshes a credential that's still here: the account may have been removed meanwhile.
+		await store.updateCredential({
 			...cred,
 			accessToken: fresh.accessToken,
 			expiresAt: fresh.expiresAt,
@@ -61,7 +67,7 @@ export function googleFetcher(
 		const query = new URLSearchParams(params).toString();
 		const url = `${API}${path}${query ? `?${query}` : ""}`;
 		const go = async (force: boolean) =>
-			fetch(url, {
+			fetchWithTimeout(url, {
 				method: init.method ?? "GET",
 				headers: {
 					Authorization: `Bearer ${await token(force)}`,
@@ -119,12 +125,17 @@ export async function syncGoogleAccount(
 		{ maxResults: "250" },
 	);
 	const live = entries.filter((c) => !c.deleted);
-	await store.upsertAccount({
-		id: account.id,
-		label: account.label,
-		provider: "google",
-		calendars: live.map((c) => mapGoogleCalendar(c, account.id)),
-	});
+	// The account may have been removed while the list was loading; don't bring it back.
+	const kept = await store.upsertAccount(
+		{
+			id: account.id,
+			label: account.label,
+			provider: "google",
+			calendars: live.map((c) => mapGoogleCalendar(c, account.id)),
+		},
+		{ create: false },
+	);
+	if (!kept) return { calendars: 0, changed: 0 };
 
 	let changed = 0;
 	for (const entry of live) {
