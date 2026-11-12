@@ -145,6 +145,8 @@ describe("google events", () => {
 				CHI,
 			),
 		).toMatchObject({
+			// Same id a local edit of that occurrence gets.
+			id: `${CAL}#s~2026-11-11T09:00:00`,
 			recurringEventId: `${CAL}#s`,
 			originalStart: "2026-11-11T09:00:00",
 			status: "cancelled",
