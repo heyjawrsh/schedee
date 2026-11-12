@@ -1,6 +1,6 @@
 {
 	"name": "schedee",
-	"version": "0.8.0",
+	"version": "0.9.0",
 	"private": true,
 	"type": "module",
 	"license": "AGPL-3.0-only",
@@ -10,7 +10,7 @@
 	},
 	"scripts": {
 		"dev": "pnpm --filter @schedee/web dev",
-		"desktop": "pnpm --filter @schedee/desktop tauri dev",
+		"desktop": "pnpm --filter @schedee/desktop dev",
 		"build": "pnpm -r run build",
 		"test": "pnpm -r run test",
 		"test:e2e": "pnpm --filter @schedee/web test:e2e",

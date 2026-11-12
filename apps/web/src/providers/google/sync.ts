@@ -7,7 +7,8 @@ import {
 	mapGoogleEvent,
 } from "@schedee/core";
 import type { LocalStore } from "../../store/db";
-import { refreshGoogle } from "./auth";
+import { GoogleAuthError, type GoogleTokens, refreshGoogle } from "./auth";
+import { desktopRefresh } from "./desktop";
 
 const API = "https://www.googleapis.com/calendar/v3";
 /** Refresh a little before the access token runs out. */
@@ -37,13 +38,18 @@ export function googleFetcher(
 			(cred.expiresAt ?? 0) - EARLY_MS > Date.now()
 		)
 			return cred.accessToken;
-		const fresh = await refreshGoogle(authUrl, cred.refreshToken);
+		let fresh: GoogleTokens;
+		if (cred.keychain) fresh = await desktopRefresh(accountId);
+		else if (cred.refreshToken)
+			fresh = await refreshGoogle(authUrl, cred.refreshToken);
+		else throw new GoogleAuthError("not_signed_in");
+		const refreshToken = fresh.refreshToken ?? cred.refreshToken;
 		await store.putCredential({
 			...cred,
 			accessToken: fresh.accessToken,
 			expiresAt: fresh.expiresAt,
 			// Google may rotate the refresh token.
-			refreshToken: fresh.refreshToken ?? cred.refreshToken,
+			...(refreshToken ? { refreshToken } : {}),
 		});
 		return fresh.accessToken;
 	};

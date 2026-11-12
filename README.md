@@ -57,6 +57,16 @@ Then press ⌘K in the app and choose **Add Google Calendar account**. While the
 
 Edits to synced events go back to Google. Each one is queued on the device with the edit itself and sent in order, so changes made offline go out when the connection returns. If Google refuses one, it's dropped and that calendar reloads from Google.
 
+#### Desktop
+
+The desktop app signs in through your default browser and keeps the refresh token in the system keychain. It talks to Google directly, so it doesn't need the Worker.
+
+1. Under [Clients](https://console.cloud.google.com/auth/clients), create a **Desktop app** client in the same project. It needs no redirect URI.
+2. Create `apps/desktop/.env.local` (gitignored) with `GOOGLE_DESKTOP_CLIENT_ID=...` and `GOOGLE_DESKTOP_CLIENT_SECRET=...`, described in `apps/desktop/.env.schema`. They're compiled into the app; Google treats a desktop client's secret as public, but keep it out of the repo.
+3. Run `pnpm desktop`, then press ⌘K and choose **Add Google Calendar account**.
+
+Unsigned dev builds may ask for keychain access after each rebuild; choose **Always Allow**.
+
 ## License
 
 [AGPL-3.0](LICENSE). If you run a modified Schedee as a service, you share your changes.
