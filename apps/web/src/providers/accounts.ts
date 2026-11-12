@@ -2,6 +2,7 @@ import type { Account } from "@schedee/core";
 import { demoSeed } from "../demo";
 import type { LocalStore } from "../store/db";
 import { GoogleAuthError, signInWithGoogle } from "./google/auth";
+import { desktopSignIn, isDesktop } from "./google/desktop";
 import { flushGoogleAccount } from "./google/outbox";
 import { GoogleApiError, syncGoogleAccount } from "./google/sync";
 
@@ -14,11 +15,18 @@ export const SYNC_EVERY_MS = 5 * 60_000;
 
 const DEMO_ACCOUNTS = new Set(demoSeed().accounts.map((a) => a.id));
 
-/** Signs in to Google in a popup, stores the tokens, drops the demo calendars, then syncs. */
+/**
+ * Signs in to Google (a popup on the web, the system browser on desktop), stores the tokens,
+ * drops the demo calendars, then syncs.
+ */
 export async function addGoogleAccount(store: LocalStore): Promise<Account> {
-	const tokens = await signInWithGoogle(AUTH_URL);
+	const desktop = isDesktop();
+	const tokens = desktop
+		? await desktopSignIn()
+		: await signInWithGoogle(AUTH_URL);
 	if (!tokens.email) throw new GoogleAuthError("no_email");
-	if (!tokens.refreshToken) throw new GoogleAuthError("no_refresh_token");
+	if (!desktop && !tokens.refreshToken)
+		throw new GoogleAuthError("no_refresh_token");
 	const account = {
 		id: `google:${tokens.email}`,
 		label: tokens.email,
@@ -27,7 +35,11 @@ export async function addGoogleAccount(store: LocalStore): Promise<Account> {
 	};
 	await store.putCredential({
 		accountId: account.id,
-		refreshToken: tokens.refreshToken,
+		...(desktop
+			? { keychain: true as const }
+			: tokens.refreshToken
+				? { refreshToken: tokens.refreshToken }
+				: {}),
 		accessToken: tokens.accessToken,
 		expiresAt: tokens.expiresAt,
 	});

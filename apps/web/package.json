@@ -30,6 +30,7 @@
 	"dependencies": {
 		"@schedee/core": "workspace:*",
 		"@schedee/ui": "workspace:*",
+		"@tauri-apps/api": "2.12.4",
 		"dexie": "4.4.7",
 		"react": "19.3.1",
 		"react-dom": "19.3.1"

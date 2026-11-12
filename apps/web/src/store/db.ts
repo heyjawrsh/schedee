@@ -18,7 +18,10 @@ type StoredAccount = Account & { order: number };
 /** OAuth tokens for a synced account. Kept on the device only. */
 export interface Credential {
 	accountId: string;
-	refreshToken: string;
+	/** Web only. On desktop the refresh token lives in the OS keychain instead. */
+	refreshToken?: string;
+	/** The refresh token is in the OS keychain (desktop). */
+	keychain?: true;
 	accessToken?: string;
 	/** Epoch ms. */
 	expiresAt?: number;
