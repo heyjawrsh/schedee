@@ -6,7 +6,12 @@ import {
 import { Schedee, type Theme, type ThemeChoice } from "@schedee/ui";
 import { useEffect, useState } from "react";
 import { demoSeed } from "./demo";
-import { addGoogleAccount, SYNC_EVERY_MS, syncAll } from "./providers/accounts";
+import {
+	addGoogleAccount,
+	reconnectGoogleAccount,
+	SYNC_EVERY_MS,
+	syncAll,
+} from "./providers/accounts";
 import { createLocalStore, type LocalStore } from "./store/db";
 
 declare global {
@@ -130,6 +135,11 @@ export function App() {
 							void addGoogleAccount(store).catch((e: unknown) =>
 								console.warn("Adding the Google account failed:", e),
 							),
+						onReconnect: (id: string) =>
+							void reconnectGoogleAccount(store, id).catch((e: unknown) =>
+								console.warn("Signing in again failed:", e),
+							),
+						onDismissDropped: (id: string) => void store.dismissDropped(id),
 					}
 				: {})}
 			{...(window.__SCHEDEE_SCROLL_TOP__ === undefined

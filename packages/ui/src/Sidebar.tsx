@@ -10,10 +10,17 @@ import {
 	Rss,
 	Search,
 	SquarePen,
+	TriangleAlert,
 	UserRound,
+	X,
 } from "lucide-react";
 import { type CSSProperties, useEffect, useState } from "react";
 import type { Theme } from "./chipColors";
+
+const PROBLEM: Record<NonNullable<Account["problem"]>, string> = {
+	signed_out: "Signed out. Sign in again to keep syncing.",
+	sync_failed: "Couldn't sync. Schedee will keep trying.",
+};
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
@@ -115,6 +122,8 @@ export function Sidebar({
 	focus = today,
 	band,
 	onPickDate,
+	onReconnect,
+	onDismissDropped,
 }: {
 	accounts: Account[];
 	today: Temporal.PlainDate;
@@ -122,6 +131,10 @@ export function Sidebar({
 	focus?: Temporal.PlainDate;
 	band?: Temporal.PlainDate;
 	onPickDate?: (d: Temporal.PlainDate) => void;
+	/** Sign an account in again after its sign-in expired. */
+	onReconnect?: ((accountId: string) => void) | undefined;
+	/** Clear an account's "changes weren't saved" notice. */
+	onDismissDropped?: ((accountId: string) => void) | undefined;
 }) {
 	return (
 		<aside className="sch-sidebar">
@@ -179,7 +192,49 @@ export function Sidebar({
 			<div className="sch-callist">
 				{accounts.map((a) => (
 					<div key={a.id} className="sch-calgroup">
-						<div className="sch-calgroup__label">{a.label}</div>
+						<div
+							className={`sch-calgroup__label${a.problem ? " sch-calgroup__label--problem" : ""}`}
+						>
+							{a.label}
+							{a.problem && (
+								<TriangleAlert
+									className="sch-calgroup__alert"
+									size={14}
+									strokeWidth={2}
+									role="img"
+									aria-label={PROBLEM[a.problem]}
+								>
+									<title>{PROBLEM[a.problem]}</title>
+								</TriangleAlert>
+							)}
+						</div>
+						{a.problem === "signed_out" && onReconnect && (
+							<button
+								type="button"
+								className="sch-calrow sch-calrow--action"
+								onClick={() => onReconnect(a.id)}
+							>
+								<span className="sch-calrow__label">Sign in again</span>
+							</button>
+						)}
+						{!!a.dropped && (
+							<div className="sch-calrow sch-calrow--notice" role="status">
+								<span className="sch-calrow__label">
+									{a.dropped === 1
+										? "1 change wasn't saved"
+										: `${a.dropped} changes weren't saved`}
+								</span>
+								{onDismissDropped && (
+									<button
+										type="button"
+										aria-label="Dismiss"
+										onClick={() => onDismissDropped(a.id)}
+									>
+										<X className="sch-icon" size={14} strokeWidth={1.5} />
+									</button>
+								)}
+							</div>
+						)}
 						{a.calendars.map((c) => (
 							<div
 								key={c.id}

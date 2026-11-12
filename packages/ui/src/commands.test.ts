@@ -26,6 +26,22 @@ const setup = (over: Partial<Parameters<typeof buildCommands>[0]> = {}) => {
 };
 
 describe("command list", () => {
+	it("offers to sign signed-out accounts in again, first", () => {
+		const ids: string[] = [];
+		const { groups, item } = setup({
+			signedOut: [{ id: "google:ada@example.com", label: "ada@example.com" }],
+			onReconnect: (id) => ids.push(id),
+			onAddAccount: () => {},
+		});
+		const accounts = groups.find((g) => g.label === "Accounts");
+		expect(accounts?.items.map((i) => i.label)).toEqual([
+			"Sign in again: ada@example.com",
+			"Add Google Calendar account",
+		]);
+		item("reconnect-google:ada@example.com").run?.();
+		expect(ids).toEqual(["google:ada@example.com"]);
+	});
+
 	it("only offers what can be done", () => {
 		const labels = setup().groups.map((g) => g.label);
 		expect(labels).toEqual(["Navigation", "View"]);

@@ -89,6 +89,10 @@ export interface LocalStore {
 	 * calendars that disappeared take their events and sync state with them.
 	 */
 	upsertAccount(a: Account): Promise<void>;
+	/** Flags an account that needs attention, or clears the flag. */
+	setAccountProblem(id: string, problem: Account["problem"]): Promise<void>;
+	/** The user has seen the "changes weren't saved" notice. */
+	dismissDropped(id: string): Promise<void>;
 	/** Removes an account with its calendars, events, tokens, sync state and unsent writes. */
 	removeAccount(id: string): Promise<void>;
 	getCredential(accountId: string): Promise<Credential | undefined>;
@@ -218,18 +222,45 @@ export function createLocalStore(
 				});
 		},
 		async dropWrite(seq, error) {
-			await db.transaction("rw", [db.outbox, db.syncState], async () => {
-				const w = await db.outbox.get(seq);
-				if (!w) return;
-				console.warn(`Dropped a Google write (${w.kind}): ${error}`);
-				await db.outbox.delete(seq);
-				const calendarId = googleCalendarKey(w.accountId, w.calendarId);
-				const state = await db.syncState.get(calendarId);
-				if (state) {
-					const { syncToken: _t, ...rest } = state;
-					await db.syncState.put(rest);
-				}
-			});
+			await db.transaction(
+				"rw",
+				[db.outbox, db.syncState, db.accounts],
+				async () => {
+					const w = await db.outbox.get(seq);
+					if (!w) return;
+					console.warn(`Dropped a Google write (${w.kind}): ${error}`);
+					await db.outbox.delete(seq);
+					const calendarId = googleCalendarKey(w.accountId, w.calendarId);
+					const state = await db.syncState.get(calendarId);
+					if (state) {
+						const { syncToken: _t, ...rest } = state;
+						await db.syncState.put(rest);
+					}
+					await db.accounts
+						.where("id")
+						.equals(w.accountId)
+						.modify((a) => {
+							a.dropped = (a.dropped ?? 0) + 1;
+						});
+				},
+			);
+		},
+		async setAccountProblem(id, problem) {
+			await db.accounts
+				.where("id")
+				.equals(id)
+				.modify((a) => {
+					if (problem) a.problem = problem;
+					else delete a.problem;
+				});
+		},
+		async dismissDropped(id) {
+			await db.accounts
+				.where("id")
+				.equals(id)
+				.modify((a) => {
+					delete a.dropped;
+				});
 		},
 		async setCalendarHidden(calendarId, hidden) {
 			await db.transaction("rw", db.accounts, async () => {
@@ -272,7 +303,15 @@ export function createLocalStore(
 						await db.events.where("calendarId").anyOf(gone).delete();
 						await db.syncState.bulkDelete(gone);
 					}
-					await db.accounts.put({ ...a, calendars, order });
+					// Sync status belongs to this device; the provider's copy doesn't carry it.
+					const { problem, dropped } = existing ?? {};
+					await db.accounts.put({
+						...a,
+						calendars,
+						order,
+						...(problem ? { problem } : {}),
+						...(dropped ? { dropped } : {}),
+					});
 				},
 			);
 		},

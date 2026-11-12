@@ -3,7 +3,7 @@ import { demoSeed } from "../demo";
 import type { LocalStore } from "../store/db";
 import { GoogleAuthError, signInWithGoogle } from "./google/auth";
 import { desktopSignIn, isDesktop } from "./google/desktop";
-import { flushGoogleAccount } from "./google/outbox";
+import { flushGoogleAccount, problemFor } from "./google/outbox";
 import { GoogleApiError, syncGoogleAccount } from "./google/sync";
 
 /** The auth Worker. Override with VITE_AUTH_URL; defaults to `wrangler dev`. */
@@ -17,13 +17,18 @@ const DEMO_ACCOUNTS = new Set(demoSeed().accounts.map((a) => a.id));
 
 /**
  * Signs in to Google (a popup on the web, the system browser on desktop), stores the tokens,
- * drops the demo calendars, then syncs.
+ * drops the demo calendars, then syncs. Signing in to an account that's already here just
+ * replaces its tokens.
  */
-export async function addGoogleAccount(store: LocalStore): Promise<Account> {
+export async function addGoogleAccount(
+	store: LocalStore,
+	/** Preselects this email on Google's screen, for signing in again. */
+	loginHint?: string,
+): Promise<Account> {
 	const desktop = isDesktop();
 	const tokens = desktop
-		? await desktopSignIn()
-		: await signInWithGoogle(AUTH_URL);
+		? await desktopSignIn(loginHint)
+		: await signInWithGoogle(AUTH_URL, loginHint);
 	if (!tokens.email) throw new GoogleAuthError("no_email");
 	if (!desktop && !tokens.refreshToken)
 		throw new GoogleAuthError("no_refresh_token");
@@ -47,9 +52,20 @@ export async function addGoogleAccount(store: LocalStore): Promise<Account> {
 	const existing = await store.db.accounts.toArray();
 	for (const a of existing)
 		if (!a.provider && DEMO_ACCOUNTS.has(a.id)) await store.removeAccount(a.id);
-	await store.upsertAccount(account);
-	await syncGoogleAccount(store, account, AUTH_URL);
+	// A known account keeps its calendars and events; the sync below brings them up to date.
+	if (!existing.some((a) => a.id === account.id))
+		await store.upsertAccount(account);
+	await syncAll(store);
 	return account;
+}
+
+/** Signs an account in again after its sign-in expired, with its email preselected. */
+export async function reconnectGoogleAccount(
+	store: LocalStore,
+	accountId: string,
+): Promise<void> {
+	const a = await store.db.accounts.get(accountId);
+	await addGoogleAccount(store, a?.label);
 }
 
 let running: Promise<void> | null = null;
@@ -85,7 +101,10 @@ async function syncOnce(store: LocalStore): Promise<void> {
 					const sent = await flushGoogleAccount(store, a.id, AUTH_URL);
 					if (sent.stopped === "offline") return;
 					await syncGoogleAccount(store, a, AUTH_URL);
+					if (a.problem) await store.setAccountProblem(a.id, undefined);
 				} catch (e: unknown) {
+					const problem = problemFor(e);
+					if (problem) await store.setAccountProblem(a.id, problem);
 					const why =
 						e instanceof GoogleAuthError
 							? e.code
