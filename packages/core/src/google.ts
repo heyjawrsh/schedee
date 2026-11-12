@@ -1,4 +1,5 @@
 import { Temporal } from "temporal-polyfill";
+import { overrideId } from "./edit";
 import type {
 	Attendee,
 	Calendar,
@@ -196,7 +197,6 @@ export function mapGoogleEvent(
 	calendarKey: string,
 	calendarZone: string,
 ): CalendarEvent | null {
-	const id = googleEventKey(calendarKey, e.id);
 	const cancelled = e.status === "cancelled";
 	if (cancelled && !e.recurringEventId) return null;
 
@@ -213,6 +213,14 @@ export function mapGoogleEvent(
 				? wallClock(original.dateTime, original.timeZone ?? zone)
 				: undefined))
 		: undefined;
+	// Exceptions take the same id a local edit of that occurrence would, so the two never duplicate.
+	const seriesId = e.recurringEventId
+		? googleEventKey(calendarKey, e.recurringEventId)
+		: undefined;
+	const id =
+		seriesId && originalStart
+			? overrideId(seriesId, originalStart)
+			: googleEventKey(calendarKey, e.id);
 	const start = time(e.start) ?? originalStart ?? "";
 	const end = time(e.end) ?? start;
 
@@ -245,9 +253,7 @@ export function mapGoogleEvent(
 		recurrence: e.recurrence
 			? parseGoogleRecurrence(e.recurrence, allDay, zone)
 			: undefined,
-		recurringEventId: e.recurringEventId
-			? googleEventKey(calendarKey, e.recurringEventId)
-			: undefined,
+		recurringEventId: seriesId,
 		originalStart: e.recurringEventId ? originalStart : undefined,
 		status: cancelled ? ("cancelled" as const) : undefined,
 		location: e.location || undefined,

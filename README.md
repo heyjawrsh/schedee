@@ -55,6 +55,8 @@ pnpm dev                            # web app on http://localhost:5173
 
 Then press ⌘K in the app and choose **Add Google Calendar account**. While the Google project is in Testing, Google asks you to sign in again every 7 days.
 
+Edits to synced events go back to Google. Each one is queued on the device with the edit itself and sent in order, so changes made offline go out when the connection returns. If Google refuses one, it's dropped and that calendar reloads from Google.
+
 ## License
 
 [AGPL-3.0](LICENSE). If you run a modified Schedee as a service, you share your changes.

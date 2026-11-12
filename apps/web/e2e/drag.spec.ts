@@ -44,6 +44,9 @@ const open = async (page: Page, extra: Record<string, unknown> = {}) => {
 	await page.locator("[data-schedee-ready]").waitFor();
 };
 
+/** Waits until the app has written every edit so far to IndexedDB (the screen updates first). */
+const saved = (page: Page) => page.evaluate(() => window.__SCHEDEE_SAVED__?.());
+
 /** Presses at a point inside `box`, moves by (dx, dy) in steps, and releases unless told not to. */
 const dragBy = async (
 	page: Page,
@@ -77,6 +80,7 @@ test("dragging an event moves it, and undo puts it back", async ({ page }) => {
 	await expect(chip(page, "Drag me")).toContainText("9 – 10");
 	await page.keyboard.press("ControlOrMeta+Shift+z");
 	await expect(chip(page, "Drag me")).toContainText("11 AM – 12 PM");
+	await saved(page);
 	await page.reload();
 	await page.locator("[data-schedee-ready]").waitFor();
 	await expect(chip(page, "Drag me")).toContainText("11 AM – 12 PM");

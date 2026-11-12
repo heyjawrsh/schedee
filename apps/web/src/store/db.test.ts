@@ -172,4 +172,84 @@ describe("local store", () => {
 		expect(await store.getCredential("g")).toBeUndefined();
 		expect(await store.getSyncState("g/a")).toBeUndefined();
 	});
+
+	it("queues writes for synced calendars and keeps them through a sync", async () => {
+		const db = fresh();
+		const store = createLocalStore(seed, db, "America/Chicago");
+		await store.ready;
+		await store.upsertAccount({
+			id: "g",
+			label: "g",
+			provider: "google",
+			calendars: [{ id: "g/cal", name: "cal", color: "#000000" }],
+		});
+		const ev = (title: string): CalendarEvent => ({
+			id: "g/cal#abc12",
+			calendarId: "g/cal",
+			title,
+			start: "2026-11-10T09:00:00",
+			end: "2026-11-10T10:00:00",
+			allDay: false,
+		});
+		expect(
+			await store.commit({
+				put: [{ ...seed().events[0], title: "A2" } as CalendarEvent],
+				remove: [],
+			}),
+		).toBe(0);
+		expect(await store.commit({ put: [ev("Mine")], remove: [] })).toBe(1);
+		const [w] = await store.pendingWrites("g");
+		expect(w).toMatchObject({
+			kind: "insert",
+			calendarId: "cal",
+			body: { id: "abc12", start: { timeZone: "America/Chicago" } },
+		});
+
+		// A sync that lands before the write is sent doesn't undo it, even a full reset.
+		const state = { calendarId: "g/cal", accountId: "g", syncToken: "t" };
+		await store.applySync(state, { put: [ev("Theirs")], remove: [] }, true);
+		expect((await db.events.get("g/cal#abc12"))?.title).toBe("Mine");
+
+		await store.finishWrite(w?.seq as number);
+		await store.applySync(state, { put: [ev("Theirs")], remove: [] });
+		expect((await db.events.get("g/cal#abc12"))?.title).toBe("Theirs");
+	});
+
+	it("drops a refused write and resyncs its calendar", async () => {
+		const db = fresh();
+		const store = createLocalStore(seed, db);
+		await store.ready;
+		await store.upsertAccount({
+			id: "g",
+			label: "g",
+			provider: "google",
+			calendars: [{ id: "g/cal", name: "cal", color: "#000000" }],
+		});
+		await store.applySync(
+			{ calendarId: "g/cal", accountId: "g", syncToken: "t" },
+			{ put: [], remove: [] },
+		);
+		await store.commit({
+			put: [
+				{
+					id: "g/cal#abc12",
+					calendarId: "g/cal",
+					title: "x",
+					start: "2026-11-10",
+					end: "2026-11-11",
+					allDay: true,
+				},
+			],
+			remove: [],
+		});
+		const [w] = await store.pendingWrites("g");
+		await store.retryWrite(w?.seq as number, "HTTP 503");
+		expect((await store.pendingWrites("g"))[0]?.tries).toBe(1);
+		await store.dropWrite(w?.seq as number, "HTTP 400");
+		expect(await store.pendingWrites("g")).toEqual([]);
+		expect(await store.getSyncState("g/cal")).toEqual({
+			calendarId: "g/cal",
+			accountId: "g",
+		});
+	});
 });

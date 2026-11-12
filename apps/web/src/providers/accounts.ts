@@ -2,6 +2,7 @@ import type { Account } from "@schedee/core";
 import { demoSeed } from "../demo";
 import type { LocalStore } from "../store/db";
 import { GoogleAuthError, signInWithGoogle } from "./google/auth";
+import { flushGoogleAccount } from "./google/outbox";
 import { GoogleApiError, syncGoogleAccount } from "./google/sync";
 
 /** The auth Worker. Override with VITE_AUTH_URL; defaults to `wrangler dev`. */
@@ -39,14 +40,40 @@ export async function addGoogleAccount(store: LocalStore): Promise<Account> {
 	return account;
 }
 
-/** Pulls changes for every synced account. One failing account doesn't stop the others. */
-export async function syncAll(store: LocalStore): Promise<void> {
+let running: Promise<void> | null = null;
+let again = false;
+
+/**
+ * Sends each synced account's queued writes, then pulls its changes. One failing account doesn't
+ * stop the others. Calls that land mid-run fold into one more run after it.
+ */
+export function syncAll(store: LocalStore): Promise<void> {
+	if (running) {
+		again = true;
+		return running;
+	}
+	running = (async () => {
+		do {
+			again = false;
+			await syncOnce(store);
+		} while (again);
+	})().finally(() => {
+		running = null;
+	});
+	return running;
+}
+
+async function syncOnce(store: LocalStore): Promise<void> {
 	const accounts = await store.db.accounts.toArray();
 	await Promise.all(
 		accounts
 			.filter((a) => a.provider === "google")
-			.map((a) =>
-				syncGoogleAccount(store, a, AUTH_URL).catch((e: unknown) => {
+			.map(async (a) => {
+				try {
+					const sent = await flushGoogleAccount(store, a.id, AUTH_URL);
+					if (sent.stopped === "offline") return;
+					await syncGoogleAccount(store, a, AUTH_URL);
+				} catch (e: unknown) {
 					const why =
 						e instanceof GoogleAuthError
 							? e.code
@@ -54,7 +81,7 @@ export async function syncAll(store: LocalStore): Promise<void> {
 								? `HTTP ${e.status}`
 								: String(e);
 					console.warn(`Sync failed for ${a.label}: ${why}`);
-				}),
-			),
+				}
+			}),
 	);
 }

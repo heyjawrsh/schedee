@@ -61,6 +61,7 @@ test("renaming one occurrence of a series only changes that day, and persists", 
 	await title.press("Enter");
 	await expect(chip(page, "Standup (moved)")).toHaveCount(1);
 	await expect(chip(page, /^Standup10/)).toHaveCount(4);
+	await page.evaluate(() => window.__SCHEDEE_SAVED__?.());
 	await page.reload();
 	await page.locator("[data-schedee-ready]").waitFor();
 	await expect(chip(page, "Standup (moved)")).toHaveCount(1);

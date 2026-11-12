@@ -50,20 +50,31 @@ export function googleFetcher(
 	return async <T>(
 		path: string,
 		params: Record<string, string> = {},
+		init: { method?: "GET" | "POST" | "PATCH" | "DELETE"; body?: unknown } = {},
 	): Promise<T> => {
-		const url = `${API}${path}?${new URLSearchParams(params)}`;
+		const query = new URLSearchParams(params).toString();
+		const url = `${API}${path}${query ? `?${query}` : ""}`;
 		const go = async (force: boolean) =>
 			fetch(url, {
-				headers: { Authorization: `Bearer ${await token(force)}` },
+				method: init.method ?? "GET",
+				headers: {
+					Authorization: `Bearer ${await token(force)}`,
+					...(init.body === undefined
+						? {}
+						: { "Content-Type": "application/json" }),
+				},
+				...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
 			});
 		let res = await go(false);
 		if (res.status === 401) res = await go(true);
 		if (!res.ok) throw new GoogleApiError(res.status, await res.text());
-		return (await res.json()) as T;
+		// Deletes answer 204 with no body.
+		const text = await res.text();
+		return (text ? JSON.parse(text) : undefined) as T;
 	};
 }
 
-type Fetcher = ReturnType<typeof googleFetcher>;
+export type Fetcher = ReturnType<typeof googleFetcher>;
 
 interface Page<T> {
 	items?: T[];

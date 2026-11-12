@@ -1,5 +1,6 @@
 export { Temporal } from "temporal-polyfill";
 export {
+	applyCalendarChange,
 	applyDelete,
 	applyDuplicate,
 	applyEdit,
@@ -8,8 +9,11 @@ export {
 	type EditResult,
 	type EditScope,
 	type EventPatch,
+	eventToken,
 	invertEdit,
+	newEventId,
 	overrideId,
+	rehome,
 } from "./edit";
 export { convertZone, type DateRange, expandEvents } from "./expand";
 export {
@@ -23,6 +27,16 @@ export {
 	parseGoogleRecurrence,
 	wallClock,
 } from "./google";
+export {
+	formatGoogleRecurrence,
+	type GoogleEventBody,
+	type GoogleInstanceRef,
+	type GoogleTarget,
+	type GoogleWrite,
+	googleInstance,
+	planGoogleWrites,
+	toGoogleBody,
+} from "./googleWrite";
 export {
 	type AllDayPlacement,
 	layoutAllDay,
