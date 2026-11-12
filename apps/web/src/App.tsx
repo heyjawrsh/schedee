@@ -16,6 +16,8 @@ declare global {
 		__SCHEDEE_THEME__?: Theme;
 		__SCHEDEE_SCROLL_TOP__?: number;
 		__SCHEDEE_SELECT__?: string;
+		/** For tests: resolves once every edit so far is saved. */
+		__SCHEDEE_SAVED__?: () => Promise<void>;
 	}
 }
 
@@ -77,6 +79,7 @@ function useLiveSnapshot(
 		if (!enabled) return;
 		const s = createLocalStore(demoSeed);
 		setStore(s);
+		window.__SCHEDEE_SAVED__ = () => s.settled();
 		const off = s.subscribe(setData);
 		const tick = setInterval(() => setNow(nowIso()), 30_000);
 		// Synced accounts: pull on start, on a timer, and when the window comes back.
@@ -84,11 +87,14 @@ function useLiveSnapshot(
 		pull();
 		const timer = setInterval(pull, SYNC_EVERY_MS);
 		addEventListener("focus", pull);
+		// Edits made offline go out as soon as the network is back.
+		addEventListener("online", pull);
 		return () => {
 			off();
 			clearInterval(tick);
 			clearInterval(timer);
 			removeEventListener("focus", pull);
+			removeEventListener("online", pull);
 		};
 	}, [enabled]);
 	return [
@@ -114,7 +120,10 @@ export function App() {
 			onTheme={setThemeChoice}
 			{...(store && !injected
 				? {
-						onCommit: (r: EditResult) => void store.commit(r),
+						onCommit: (r: EditResult) =>
+							void store.commit(r).then((queued) => {
+								if (queued) void syncAll(store);
+							}),
 						onCalendarVisibility: (id: string, hidden: boolean) =>
 							void store.setCalendarHidden(id, hidden),
 						onAddAccount: () =>
