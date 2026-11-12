@@ -1,6 +1,6 @@
 [package]
 name = "schedee"
-version = "0.10.0"
+version = "0.11.0"
 description = "Schedee desktop shell"
 authors = ["Joshua Butner"]
 license = "AGPL-3.0-only"
