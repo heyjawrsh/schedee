@@ -79,6 +79,10 @@ export interface SchedeeProps {
 	onCalendarVisibility?: (calendarId: string, hidden: boolean) => void;
 	/** Start connecting a Google account. Without it the menu doesn't offer one. */
 	onAddAccount?: () => void;
+	/** Sign an account in again after its sign-in expired. */
+	onReconnect?: (accountId: string) => void;
+	/** Clear an account's "changes weren't saved" notice. */
+	onDismissDropped?: (accountId: string) => void;
 }
 
 /** The app frame: sidebar, main view (day, N days, week or month) and context panel. */
@@ -93,6 +97,8 @@ export function Schedee({
 	onTheme,
 	onCalendarVisibility,
 	onAddAccount,
+	onReconnect,
+	onDismissDropped,
 }: SchedeeProps) {
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
@@ -264,6 +270,8 @@ export function Schedee({
 		calendars: [...calendars.values()],
 		onCalendarVisibility,
 		onAddAccount,
+		signedOut: snapshot.accounts.filter((a) => a.problem === "signed_out"),
+		onReconnect,
 		theme: themeChoice,
 		onTheme,
 	});
@@ -381,6 +389,8 @@ export function Schedee({
 				focus={view.anchor}
 				{...(view.kind === "month" ? {} : { band: weekOf(first).start })}
 				onPickDate={(d) => setViewState((v) => goTo(v, d))}
+				onReconnect={onReconnect}
+				onDismissDropped={onDismissDropped}
 			/>
 			<main className="sch-main" ref={mainRef}>
 				<Header

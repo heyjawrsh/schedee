@@ -192,6 +192,15 @@
 	color: var(--text-secondary);
 	white-space: nowrap;
 }
+.sch-calgroup__label--problem {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+.sch-calgroup__alert {
+	flex: none;
+	color: var(--accent);
+}
 .sch-calrow {
 	position: relative;
 	height: 28px;
@@ -244,6 +253,25 @@
 .sch-calrow--hidden .sch-calrow__swatch,
 .sch-calrow--hidden .sch-calrow__label {
 	opacity: 0.25;
+}
+/* Account notices: our own design, not from the reference. */
+.sch-calrow--action,
+.sch-calrow--notice {
+	width: 100%;
+	padding: 0;
+	border: 0;
+	background: none;
+	font: inherit;
+	text-align: left;
+	color: var(--text-secondary);
+}
+.sch-calrow--action {
+	cursor: pointer;
+	color: var(--accent);
+}
+.sch-calrow--action .sch-calrow__label,
+.sch-calrow--notice .sch-calrow__label {
+	left: 8px;
 }
 .sch-calrow > button {
 	position: absolute;

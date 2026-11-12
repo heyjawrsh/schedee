@@ -198,7 +198,10 @@ fn session(r: TokenResponse) -> Result<Session, String> {
 /// Opens Google's consent page in the browser and resolves with the signed-in account. The
 /// refresh token is saved to the keychain under `google:<email>`.
 #[tauri::command]
-pub async fn google_sign_in(app: AppHandle) -> Result<Session, String> {
+pub async fn google_sign_in(
+  app: AppHandle,
+  login_hint: Option<String>,
+) -> Result<Session, String> {
   let (client_id, secret) = client()?;
   let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| e.to_string())?;
   let port = listener.local_addr().map_err(|e| e.to_string())?.port();
@@ -219,6 +222,9 @@ pub async fn google_sign_in(app: AppHandle) -> Result<Session, String> {
     .append_pair("code_challenge", &challenge(&verifier))
     .append_pair("code_challenge_method", "S256")
     .append_pair("state", &state);
+  if let Some(hint) = login_hint.as_deref().filter(|h| !h.is_empty()) {
+    url.query_pairs_mut().append_pair("login_hint", hint);
+  }
   app
     .opener()
     .open_url(url.as_str(), None::<&str>)

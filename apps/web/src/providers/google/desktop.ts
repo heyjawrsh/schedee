@@ -19,12 +19,16 @@ const call = async <T>(cmd: string, args?: Record<string, unknown>) => {
 	try {
 		return await invoke<T>(cmd, args);
 	} catch (e) {
-		throw new GoogleAuthError(typeof e === "string" ? e : String(e));
+		const code = typeof e === "string" ? e : String(e);
+		// No network: fail the way fetch does, so callers treat it as offline.
+		if (code.startsWith("network:")) throw new TypeError(code);
+		throw new GoogleAuthError(code);
 	}
 };
 
 /** Opens Google in the system browser and resolves once the user is back with an account. */
-export const desktopSignIn = () => call<GoogleTokens>("google_sign_in");
+export const desktopSignIn = (loginHint?: string) =>
+	call<GoogleTokens>("google_sign_in", { loginHint: loginHint ?? null });
 
 /** A new access token from the keychain's refresh token. */
 export const desktopRefresh = (accountId: string) =>

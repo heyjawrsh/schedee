@@ -24,6 +24,13 @@ export interface Account {
 	calendars: Calendar[];
 	/** Where the account syncs from. Absent for calendars that live only on this device. */
 	provider?: "google";
+	/**
+	 * Set while syncing needs attention: the sign-in expired or was revoked, or syncing keeps
+	 * failing for another reason. Cleared by the next good sync.
+	 */
+	problem?: "signed_out" | "sync_failed";
+	/** Edits the provider refused for good since the user last dismissed the notice. */
+	dropped?: number;
 }
 
 export type Rsvp = "accepted" | "tentative" | "needsAction" | "declined";

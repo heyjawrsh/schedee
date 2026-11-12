@@ -24,6 +24,9 @@ export interface CommandContext {
 	theme?: ThemeChoice | undefined;
 	onTheme?: ((t: ThemeChoice) => void) | undefined;
 	onAddAccount?: (() => void) | undefined;
+	/** Accounts whose sign-in expired, for "Sign in again". */
+	signedOut?: { id: string; label: string }[] | undefined;
+	onReconnect?: ((accountId: string) => void) | undefined;
 }
 
 const UNIT: Record<ViewState["kind"], string> = {
@@ -135,17 +138,23 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 		});
 	}
 
+	const accounts: CommandItem[] = [];
+	if (c.onReconnect) {
+		const reconnect = c.onReconnect;
+		for (const a of c.signedOut ?? [])
+			accounts.push({
+				id: `reconnect-${a.id}`,
+				label: `Sign in again: ${a.label}`,
+				run: () => reconnect(a.id),
+			});
+	}
 	if (c.onAddAccount)
-		groups.push({
-			label: "Accounts",
-			items: [
-				{
-					id: "add-google",
-					label: "Add Google Calendar account",
-					run: c.onAddAccount,
-				},
-			],
+		accounts.push({
+			id: "add-google",
+			label: "Add Google Calendar account",
+			run: c.onAddAccount,
 		});
+	if (accounts.length) groups.push({ label: "Accounts", items: accounts });
 
 	const views: CommandItem[] = [];
 	if (c.view.kind !== "day")

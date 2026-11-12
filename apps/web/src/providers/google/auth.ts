@@ -82,12 +82,17 @@ const post = async (url: string, body: unknown): Promise<TokenResponse> => {
 };
 
 /** Opens Google's consent screen in a popup and resolves with tokens for the chosen account. */
-export async function signInWithGoogle(authUrl: string): Promise<GoogleTokens> {
+export async function signInWithGoogle(
+	authUrl: string,
+	/** Preselects this account on Google's screen. */
+	loginHint?: string,
+): Promise<GoogleTokens> {
 	const state = random(32);
 	const { verifier, challenge } = await pkcePair();
 	const start = `${authUrl}/oauth/google/start?${new URLSearchParams({
 		state,
 		code_challenge: challenge,
+		...(loginHint ? { login_hint: loginHint } : {}),
 	})}`;
 	const popup = window.open(
 		start,

@@ -48,10 +48,23 @@ async function fakeGoogle(context: BrowserContext) {
 		],
 	]);
 	let offline = false;
+	/** The user revoked our access: refreshes fail and old tokens stop working. */
+	let revoked = false;
+	/** Google refuses every write. */
+	let refusing = false;
 	await context.route(`${AUTH}/oauth/google/**`, (route) => {
 		if (route.request().method() === "OPTIONS")
 			return route.fulfill({ status: 204, headers: cors });
-		calls.push(new URL(route.request().url()).pathname);
+		const path = new URL(route.request().url()).pathname;
+		calls.push(path);
+		if (revoked && path.endsWith("/refresh"))
+			return route.fulfill({
+				status: 400,
+				headers: cors,
+				json: { error: "invalid_grant" },
+			});
+		// A fresh sign-in is a new grant.
+		if (path.endsWith("/token")) revoked = false;
 		return route.fulfill({
 			headers: cors,
 			json: {
@@ -83,6 +96,8 @@ async function fakeGoogle(context: BrowserContext) {
 		if (method === "OPTIONS")
 			return route.fulfill({ status: 204, headers: cors });
 		if (offline) return route.abort("internetdisconnected");
+		if (revoked)
+			return route.fulfill({ status: 401, headers: cors, body: "revoked" });
 		calls.push(
 			`${url.pathname}${url.searchParams.has("syncToken") ? "?sync" : ""}`,
 		);
@@ -101,6 +116,8 @@ async function fakeGoogle(context: BrowserContext) {
 					],
 				},
 			});
+		if (method !== "GET" && refusing)
+			return route.fulfill({ status: 400, headers: cors, body: "invalid" });
 		if (method !== "GET") {
 			const body = req.postDataJSON() as FakeEvent | undefined;
 			const path = url.pathname.replace(/^.*\/calendars\//, "/");
@@ -136,6 +153,12 @@ async function fakeGoogle(context: BrowserContext) {
 		},
 		setOffline: (v: boolean) => {
 			offline = v;
+		},
+		revoke: () => {
+			revoked = true;
+		},
+		refuse: (v: boolean) => {
+			refusing = v;
 		},
 	};
 }
@@ -249,4 +272,56 @@ test("edits go to Google, and wait out a lost connection", async ({
 	await page.reload();
 	await page.locator("[data-schedee-ready]").waitFor();
 	await expect(chip(page, "Offline plan")).toBeVisible();
+});
+
+test("a revoked sign-in asks to sign in again, and a refused edit says so", async ({
+	page,
+	context,
+}) => {
+	const google = await fakeGoogle(context);
+	await page.addInitScript(() => {
+		window.__SCHEDEE_SCROLL_TOP__ = 8 * 48;
+	});
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto("/");
+	await page.locator("[data-schedee-ready]").waitFor();
+	await page.keyboard.press("ControlOrMeta+k");
+	await page.keyboard.type("google");
+	await page.keyboard.press("Enter");
+	await expect(chip(page, "Kickoff")).toBeVisible();
+	const sidebar = page.locator(".sch-sidebar");
+
+	// Google turns us away: the account says so and offers to sign in again.
+	google.revoke();
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+	const again = sidebar.getByRole("button", { name: "Sign in again" });
+	await expect(again).toBeVisible();
+	await expect(sidebar.getByRole("img", { name: /Signed out/ })).toBeVisible();
+	// The calendar stays on screen meanwhile.
+	await expect(chip(page, "Kickoff")).toBeVisible();
+
+	// The command menu offers the same.
+	await page.keyboard.press("ControlOrMeta+k");
+	await page.keyboard.type("sign in again");
+	await expect(
+		page.getByText("Sign in again: ada@example.com", { exact: true }),
+	).toBeVisible();
+	await page.keyboard.press("Escape");
+
+	await again.click();
+	await expect(again).toHaveCount(0);
+	await expect(sidebar.getByRole("img", { name: /Signed out/ })).toHaveCount(0);
+	await expect(chip(page, "Kickoff")).toBeVisible();
+
+	// Google refuses an edit for good: one quiet notice, until dismissed.
+	google.refuse(true);
+	await chip(page, "Kickoff").click();
+	await page.keyboard.press("Backspace");
+	const notice = sidebar.getByRole("status");
+	await expect(notice).toHaveText("1 change wasn't saved");
+	google.refuse(false);
+	await notice.getByRole("button", { name: "Dismiss" }).click();
+	await expect(notice).toHaveCount(0);
+	// The calendar went back to what Google has.
+	await expect(chip(page, "Kickoff")).toBeVisible();
 });
