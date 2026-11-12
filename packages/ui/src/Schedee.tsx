@@ -1,4 +1,5 @@
 import {
+	applyCalendarChange,
 	applyDelete,
 	applyDuplicate,
 	applyEdit,
@@ -13,6 +14,7 @@ import {
 	goTo,
 	initialView,
 	invertEdit,
+	newEventId,
 	searchEvents,
 	setView,
 	step,
@@ -51,7 +53,6 @@ function useSize(fallback: { width: number; height: number }) {
 	return [ref, size] as const;
 }
 
-const newId = () => crypto.randomUUID();
 /** How far back and ahead search looks for occurrences of repeating events. */
 const SEARCH_YEARS_BACK = 5;
 const SEARCH_YEARS_AHEAD = 2;
@@ -189,13 +190,13 @@ export function Schedee({
 	const [focusTitle, setFocusTitle] = useState<string | null>(null);
 
 	const duplicate = (i: EventInstance, start?: string, end?: string) => {
-		const id = newId();
+		const id = newEventId(i.calendarId);
 		commit(applyDuplicate(i, id, start, end));
 		setSelectedId(id);
 	};
 	const create = (start: string, end: string) => {
 		if (!defaultCalendar) return;
-		const id = newId();
+		const id = newEventId(defaultCalendar.id);
 		commit({
 			put: [
 				{
@@ -454,9 +455,21 @@ export function Schedee({
 						readOnly={readOnly}
 						theme={theme}
 						focusTitle={focusTitle === selected.id}
-						onChange={(patch, scope) =>
-							commit(applyEdit(eventsRef.current, selected, patch, scope))
-						}
+						onChange={(patch, scope) => {
+							const { calendarId } = patch;
+							if (calendarId && calendarId !== selected.calendarId) {
+								// Ids carry their calendar, so a calendar change is a move.
+								const r = applyCalendarChange(
+									eventsRef.current,
+									selected,
+									calendarId,
+								);
+								commit({ put: r.put, remove: r.remove });
+								setSelectedId(r.id);
+								return;
+							}
+							commit(applyEdit(eventsRef.current, selected, patch, scope));
+						}}
 						onDelete={(scope) => {
 							commit(applyDelete(eventsRef.current, selected, scope));
 							setSelectedId(null);
