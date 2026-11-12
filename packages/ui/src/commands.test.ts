@@ -42,6 +42,26 @@ describe("command list", () => {
 		expect(ids).toEqual(["google:ada@example.com"]);
 	});
 
+	it("asks before removing an account", () => {
+		const ids: string[] = [];
+		const { item } = setup({
+			removable: [{ id: "google:ada@example.com", label: "ada@example.com" }],
+			onRemoveAccount: (id) => ids.push(id),
+		});
+		const remove = item("remove-google:ada@example.com");
+		expect(remove.label).toBe("Remove account: ada@example.com…");
+		expect(remove.run).toBeUndefined();
+		const [no, yes] = remove.items ?? [];
+		expect([no?.label, yes?.label]).toEqual([
+			"Cancel",
+			"Remove from this device",
+		]);
+		no?.run?.();
+		expect(ids).toEqual([]);
+		yes?.run?.();
+		expect(ids).toEqual(["google:ada@example.com"]);
+	});
+
 	it("only offers what can be done", () => {
 		const labels = setup().groups.map((g) => g.label);
 		expect(labels).toEqual(["Navigation", "View"]);

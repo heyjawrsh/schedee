@@ -9,6 +9,7 @@ import { demoSeed } from "./demo";
 import {
 	addGoogleAccount,
 	reconnectGoogleAccount,
+	removeAccount,
 	SYNC_EVERY_MS,
 	syncAll,
 } from "./providers/accounts";
@@ -138,6 +139,10 @@ export function App() {
 						onReconnect: (id: string) =>
 							void reconnectGoogleAccount(store, id).catch((e: unknown) =>
 								console.warn("Signing in again failed:", e),
+							),
+						onRemoveAccount: (id: string) =>
+							void removeAccount(store, id).catch((e: unknown) =>
+								console.warn("Removing the account failed:", e),
 							),
 						onDismissDropped: (id: string) => void store.dismissDropped(id),
 					}

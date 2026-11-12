@@ -95,6 +95,8 @@ export interface LocalStore {
 	dismissDropped(id: string): Promise<void>;
 	/** Removes an account with its calendars, events, tokens, sync state and unsent writes. */
 	removeAccount(id: string): Promise<void>;
+	/** Puts the seed data back if the store is empty. */
+	reseed(): Promise<void>;
 	getCredential(accountId: string): Promise<Credential | undefined>;
 	putCredential(c: Credential): Promise<void>;
 	getSyncState(calendarId: string): Promise<SyncState | undefined>;
@@ -176,15 +178,20 @@ export function createLocalStore(
 			},
 		);
 	}
-	const ready = db.transaction("rw", db.accounts, db.events, async () => {
-		if ((await db.accounts.count()) > 0) return;
-		const s = seed();
-		await db.accounts.bulkPut(s.accounts.map((a, order) => ({ ...a, order })));
-		await db.events.bulkPut(s.events);
-	});
+	const reseed = () =>
+		db.transaction("rw", db.accounts, db.events, async () => {
+			if ((await db.accounts.count()) > 0) return;
+			const s = seed();
+			await db.accounts.bulkPut(
+				s.accounts.map((a, order) => ({ ...a, order })),
+			);
+			await db.events.bulkPut(s.events);
+		});
+	const ready = reseed();
 	return {
 		db,
 		ready,
+		reseed,
 		subscribe(onChange) {
 			const sub = liveQuery(async () => ({
 				accounts: (await db.accounts.orderBy("order").toArray()).map(

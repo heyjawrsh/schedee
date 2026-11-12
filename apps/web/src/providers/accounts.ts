@@ -2,7 +2,7 @@ import type { Account } from "@schedee/core";
 import { demoSeed } from "../demo";
 import type { LocalStore } from "../store/db";
 import { GoogleAuthError, signInWithGoogle } from "./google/auth";
-import { desktopSignIn, isDesktop } from "./google/desktop";
+import { desktopForget, desktopSignIn, isDesktop } from "./google/desktop";
 import { flushGoogleAccount, problemFor } from "./google/outbox";
 import { GoogleApiError, syncGoogleAccount } from "./google/sync";
 
@@ -66,6 +66,26 @@ export async function reconnectGoogleAccount(
 ): Promise<void> {
 	const a = await store.db.accounts.get(accountId);
 	await addGoogleAccount(store, a?.label);
+}
+
+/**
+ * Removes a synced account from this device: its calendars, events, unsent edits, tokens and, on
+ * desktop, its keychain entry. Nothing changes on Google. With no accounts left, the demo
+ * calendars come back.
+ */
+export async function removeAccount(
+	store: LocalStore,
+	accountId: string,
+): Promise<void> {
+	// A sync in flight would write the account back.
+	await running?.catch(() => {});
+	const cred = await store.getCredential(accountId);
+	await store.removeAccount(accountId);
+	if (cred?.keychain)
+		await desktopForget(accountId).catch((e: unknown) =>
+			console.warn("Couldn't clear the keychain entry:", e),
+		);
+	if ((await store.db.accounts.count()) === 0) await store.reseed();
 }
 
 let running: Promise<void> | null = null;

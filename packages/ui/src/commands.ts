@@ -27,6 +27,9 @@ export interface CommandContext {
 	/** Accounts whose sign-in expired, for "Sign in again". */
 	signedOut?: { id: string; label: string }[] | undefined;
 	onReconnect?: ((accountId: string) => void) | undefined;
+	/** Synced accounts the user can remove from this device. */
+	removable?: { id: string; label: string }[] | undefined;
+	onRemoveAccount?: ((accountId: string) => void) | undefined;
 }
 
 const UNIT: Record<ViewState["kind"], string> = {
@@ -154,6 +157,23 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 			label: "Add Google Calendar account",
 			run: c.onAddAccount,
 		});
+	if (c.onRemoveAccount) {
+		const remove = c.onRemoveAccount;
+		for (const a of c.removable ?? [])
+			accounts.push({
+				id: `remove-${a.id}`,
+				label: `Remove account: ${a.label}…`,
+				// Cancel first, so a stray Enter doesn't remove anything.
+				items: [
+					{ id: `remove-${a.id}-no`, label: "Cancel", run: () => {} },
+					{
+						id: `remove-${a.id}-yes`,
+						label: "Remove from this device",
+						run: () => remove(a.id),
+					},
+				],
+			});
+	}
 	if (accounts.length) groups.push({ label: "Accounts", items: accounts });
 
 	const views: CommandItem[] = [];
