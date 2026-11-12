@@ -15,6 +15,8 @@ export interface Calendar {
 	isDefault?: boolean;
 	/** Read-only subscriptions (ICS feeds, holidays, birthdays) draw a feed glyph on the swatch. */
 	subscribed?: boolean;
+	/** Set while this calendar can't be loaded (a feed that fails to fetch or parse). */
+	problem?: "sync_failed";
 }
 
 export interface Account {
@@ -22,8 +24,11 @@ export interface Account {
 	/** Usually the account email. */
 	label: string;
 	calendars: Calendar[];
-	/** Where the account syncs from. Absent for calendars that live only on this device. */
-	provider?: "google";
+	/**
+	 * Where the account syncs from: Google, or "ics" for the group holding feed subscriptions.
+	 * Absent for calendars that live only on this device.
+	 */
+	provider?: "google" | "ics";
 	/**
 	 * Set while syncing needs attention: the sign-in expired or was revoked, or syncing keeps
 	 * failing for another reason. Cleared by the next good sync.

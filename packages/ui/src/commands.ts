@@ -1,5 +1,6 @@
 import {
 	type Calendar,
+	feedUrl,
 	goTo,
 	parseDate,
 	setView,
@@ -30,6 +31,11 @@ export interface CommandContext {
 	/** Synced accounts the user can remove from this device. */
 	removable?: { id: string; label: string }[] | undefined;
 	onRemoveAccount?: ((accountId: string) => void) | undefined;
+	/** Subscribes to an ICS feed at this URL (already checked and normalized). */
+	onSubscribeFeed?: ((url: string) => void) | undefined;
+	/** Feed subscriptions the user can remove. */
+	feeds?: { id: string; name: string }[] | undefined;
+	onUnsubscribeFeed?: ((calendarId: string) => void) | undefined;
 }
 
 const UNIT: Record<ViewState["kind"], string> = {
@@ -170,6 +176,39 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 						id: `remove-${a.id}-yes`,
 						label: "Remove from this device",
 						run: () => remove(a.id),
+					},
+				],
+			});
+	}
+	if (c.onSubscribeFeed) {
+		const subscribe = c.onSubscribeFeed;
+		accounts.push({
+			id: "subscribe-feed",
+			label: "Subscribe to calendar feed…",
+			prompt: {
+				placeholder: "Paste a calendar link (webcal:// or https://)...",
+				submit: (text) => {
+					const url = feedUrl(text);
+					if (!url) return false;
+					subscribe(url);
+					return true;
+				},
+			},
+		});
+	}
+	if (c.onUnsubscribeFeed) {
+		const unsubscribe = c.onUnsubscribeFeed;
+		for (const f of c.feeds ?? [])
+			accounts.push({
+				id: `unsubscribe-${f.id}`,
+				label: `Unsubscribe from “${f.name}”…`,
+				// Cancel first, so a stray Enter doesn't remove anything.
+				items: [
+					{ id: `unsubscribe-${f.id}-no`, label: "Cancel", run: () => {} },
+					{
+						id: `unsubscribe-${f.id}-yes`,
+						label: "Unsubscribe",
+						run: () => unsubscribe(f.id),
 					},
 				],
 			});

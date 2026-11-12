@@ -22,6 +22,8 @@ const PROBLEM: Record<NonNullable<Account["problem"]>, string> = {
 	sync_failed: "Couldn't sync. Schedee will keep trying.",
 };
 
+const FEED_PROBLEM = "Couldn't load this calendar. Schedee will keep trying.";
+
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
 function MiniMonth({
@@ -251,6 +253,17 @@ export function Sidebar({
 										<span className="sch-calrow__suffix">Default</span>
 									)}
 								</span>
+								{c.problem && (
+									<TriangleAlert
+										className="sch-calrow__alert"
+										size={14}
+										strokeWidth={2}
+										role="img"
+										aria-label={FEED_PROBLEM}
+									>
+										<title>{FEED_PROBLEM}</title>
+									</TriangleAlert>
+								)}
 								{c.hidden && (
 									<button type="button" aria-label={`Show ${c.name}`}>
 										<EyeOff className="sch-icon" size={16} strokeWidth={1.5} />

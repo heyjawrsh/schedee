@@ -62,6 +62,29 @@ describe("command list", () => {
 		expect(ids).toEqual(["google:ada@example.com"]);
 	});
 
+	it("subscribes to feed links only, and asks before unsubscribing", () => {
+		const subscribed: string[] = [];
+		const gone: string[] = [];
+		const { item } = setup({
+			onSubscribeFeed: (url) => subscribed.push(url),
+			feeds: [{ id: "ics:1", name: "Team rota" }],
+			onUnsubscribeFeed: (id) => gone.push(id),
+		});
+		const submit = item("subscribe-feed").prompt?.submit;
+		expect(submit?.("not a link")).toBe(false);
+		expect(submit?.("webcal://example.com/a.ics")).toBe(true);
+		expect(subscribed).toEqual(["https://example.com/a.ics"]);
+
+		const un = item("unsubscribe-ics:1");
+		expect(un.label).toBe("Unsubscribe from “Team rota”…");
+		const [no, yes] = un.items ?? [];
+		expect(no?.label).toBe("Cancel");
+		no?.run?.();
+		expect(gone).toEqual([]);
+		yes?.run?.();
+		expect(gone).toEqual(["ics:1"]);
+	});
+
 	it("only offers what can be done", () => {
 		const labels = setup().groups.map((g) => g.label);
 		expect(labels).toEqual(["Navigation", "View"]);

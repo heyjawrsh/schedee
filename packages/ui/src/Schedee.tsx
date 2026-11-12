@@ -83,6 +83,10 @@ export interface SchedeeProps {
 	onReconnect?: (accountId: string) => void;
 	/** Remove a synced account from this device. Without it the menu doesn't offer to. */
 	onRemoveAccount?: (accountId: string) => void;
+	/** Subscribe to an ICS feed. Without it the menu doesn't offer to. */
+	onSubscribeFeed?: (url: string) => void;
+	/** Remove a feed subscription. */
+	onUnsubscribeFeed?: (calendarId: string) => void;
 	/** Clear an account's "changes weren't saved" notice. */
 	onDismissDropped?: (accountId: string) => void;
 }
@@ -101,6 +105,8 @@ export function Schedee({
 	onAddAccount,
 	onReconnect,
 	onRemoveAccount,
+	onSubscribeFeed,
+	onUnsubscribeFeed,
 	onDismissDropped,
 }: SchedeeProps) {
 	useEffect(() => {
@@ -275,8 +281,13 @@ export function Schedee({
 		onAddAccount,
 		signedOut: snapshot.accounts.filter((a) => a.problem === "signed_out"),
 		onReconnect,
-		removable: snapshot.accounts.filter((a) => a.provider),
+		removable: snapshot.accounts.filter((a) => a.provider === "google"),
 		onRemoveAccount,
+		onSubscribeFeed,
+		feeds: snapshot.accounts
+			.filter((a) => a.provider === "ics")
+			.flatMap((a) => a.calendars),
+		onUnsubscribeFeed,
 		theme: themeChoice,
 		onTheme,
 	});
@@ -348,12 +359,10 @@ export function Schedee({
 				}
 				return;
 			}
-			if (
-				(e.key === "Backspace" || e.key === "Delete") &&
-				a.selected &&
-				!a.readOnly
-			) {
+			if ((e.key === "Backspace" || e.key === "Delete") && a.selected) {
+				// Even when the event can't be deleted, Backspace mustn't navigate the page back.
 				e.preventDefault();
+				if (a.readOnly) return;
 				a.commit(applyDelete(eventsRef.current, a.selected));
 				setSelectedId(null);
 				return;

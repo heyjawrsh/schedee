@@ -1,6 +1,7 @@
 import {
 	type Account,
 	applyResult,
+	type Calendar,
 	type CalendarEvent,
 	type CalendarSnapshot,
 	type EditResult,
@@ -43,12 +44,29 @@ export type QueuedWrite = GoogleWrite & {
 	error?: string;
 };
 
+/** An ICS feed subscription: one calendar in the "Subscriptions" group. */
+export interface Feed {
+	calendarId: string;
+	/** Often carries a secret token; kept on the device only. */
+	url: string;
+	etag?: string;
+	lastModified?: string;
+	/** Epoch ms of the last fetch attempt that got an answer. */
+	fetchedAt?: number;
+	/** What the feed asks for; we refresh no more often than every 15 minutes. */
+	refreshMinutes?: number;
+}
+
+/** The account that groups feed subscriptions in the sidebar. */
+export const FEEDS_ACCOUNT = "ics";
+
 export class SchedeeDB extends Dexie {
 	accounts!: EntityTable<StoredAccount, "id">;
 	events!: EntityTable<CalendarEvent, "id">;
 	credentials!: EntityTable<Credential, "accountId">;
 	syncState!: EntityTable<SyncState, "calendarId">;
 	outbox!: EntityTable<QueuedWrite, "seq">;
+	feeds!: EntityTable<Feed, "calendarId">;
 
 	constructor(name = "schedee") {
 		super(name);
@@ -64,6 +82,7 @@ export class SchedeeDB extends Dexie {
 		this.version(3)
 			.stores({ outbox: "++seq, accountId, *localIds" })
 			.upgrade((tx) => tx.table("syncState").clear());
+		this.version(4).stores({ feeds: "calendarId" });
 	}
 }
 
@@ -99,6 +118,26 @@ export interface LocalStore {
 	removeAccount(id: string): Promise<void>;
 	/** Puts the seed data back if the store is empty. */
 	reseed(): Promise<void>;
+	/** Every feed subscription. */
+	feeds(): Promise<Feed[]>;
+	/** Adds a feed's calendar to the "Subscriptions" group, creating the group if needed. */
+	addFeed(calendar: Calendar, url: string): Promise<void>;
+	/**
+	 * Records a fetch: new validators and timing, the calendar's name, color and problem, and,
+	 * with `events`, the feed's full contents in place of the old ones. Does nothing if the feed
+	 * was removed meanwhile.
+	 */
+	applyFeed(
+		calendarId: string,
+		update: {
+			feed: Partial<Omit<Feed, "calendarId" | "url">>;
+			calendar?: Partial<Pick<Calendar, "name" | "color">>;
+			problem?: Calendar["problem"];
+			events?: CalendarEvent[];
+		},
+	): Promise<void>;
+	/** Removes a feed with its events; the group goes once it's empty. */
+	removeFeed(calendarId: string): Promise<void>;
 	getCredential(accountId: string): Promise<Credential | undefined>;
 	putCredential(c: Credential): Promise<void>;
 	/** Replaces a credential only if it's still stored (a sync can outlive its account). */
@@ -341,6 +380,63 @@ export function createLocalStore(
 					await db.syncState.where("accountId").equals(id).delete();
 					await db.credentials.delete(id);
 					await db.accounts.delete(id);
+				},
+			);
+		},
+		feeds: () => db.feeds.toArray(),
+		async addFeed(calendar, url) {
+			await db.transaction("rw", [db.accounts, db.feeds], async () => {
+				const group = await db.accounts.get(FEEDS_ACCOUNT);
+				const order =
+					group?.order ??
+					((await db.accounts.orderBy("order").last())?.order ?? -1) + 1;
+				await db.accounts.put({
+					id: FEEDS_ACCOUNT,
+					label: "Subscriptions",
+					provider: "ics",
+					calendars: [...(group?.calendars ?? []), calendar],
+					order,
+				});
+				await db.feeds.put({ calendarId: calendar.id, url });
+			});
+		},
+		async applyFeed(calendarId, { feed, calendar, problem, events }) {
+			await db.transaction(
+				"rw",
+				[db.accounts, db.feeds, db.events],
+				async () => {
+					const row = await db.feeds.get(calendarId);
+					if (!row) return;
+					await db.feeds.put({ ...row, ...feed });
+					const group = await db.accounts.get(FEEDS_ACCOUNT);
+					if (group)
+						await db.accounts.put({
+							...group,
+							calendars: group.calendars.map((c) => {
+								if (c.id !== calendarId) return c;
+								const { problem: _p, ...rest } = { ...c, ...calendar };
+								return problem ? { ...rest, problem } : rest;
+							}),
+						});
+					if (events) {
+						await db.events.where("calendarId").equals(calendarId).delete();
+						await db.events.bulkPut(events);
+					}
+				},
+			);
+		},
+		async removeFeed(calendarId) {
+			await db.transaction(
+				"rw",
+				[db.accounts, db.feeds, db.events],
+				async () => {
+					await db.feeds.delete(calendarId);
+					await db.events.where("calendarId").equals(calendarId).delete();
+					const group = await db.accounts.get(FEEDS_ACCOUNT);
+					if (!group) return;
+					const calendars = group.calendars.filter((c) => c.id !== calendarId);
+					if (calendars.length) await db.accounts.put({ ...group, calendars });
+					else await db.accounts.delete(FEEDS_ACCOUNT);
 				},
 			);
 		},
