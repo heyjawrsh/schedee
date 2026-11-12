@@ -71,14 +71,12 @@ export async function reconnectGoogleAccount(
 /**
  * Removes a synced account from this device: its calendars, events, unsent edits, tokens and, on
  * desktop, its keychain entry. Nothing changes on Google. With no accounts left, the demo
- * calendars come back.
+ * calendars come back. A sync still running for it finds the account gone and writes nothing.
  */
 export async function removeAccount(
 	store: LocalStore,
 	accountId: string,
 ): Promise<void> {
-	// A sync in flight would write the account back.
-	await running?.catch(() => {});
 	const cred = await store.getCredential(accountId);
 	await store.removeAccount(accountId);
 	if (cred?.keychain)

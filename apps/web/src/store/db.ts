@@ -86,9 +86,11 @@ export interface LocalStore {
 	setCalendarHidden(calendarId: string, hidden: boolean): Promise<void>;
 	/**
 	 * Adds an account or refreshes its calendar list. Calendars the user hid here stay hidden;
-	 * calendars that disappeared take their events and sync state with them.
+	 * calendars that disappeared take their events and sync state with them. With
+	 * `create: false` it only refreshes an account that's still here. Resolves with whether the
+	 * account was written.
 	 */
-	upsertAccount(a: Account): Promise<void>;
+	upsertAccount(a: Account, opts?: { create?: boolean }): Promise<boolean>;
 	/** Flags an account that needs attention, or clears the flag. */
 	setAccountProblem(id: string, problem: Account["problem"]): Promise<void>;
 	/** The user has seen the "changes weren't saved" notice. */
@@ -99,6 +101,8 @@ export interface LocalStore {
 	reseed(): Promise<void>;
 	getCredential(accountId: string): Promise<Credential | undefined>;
 	putCredential(c: Credential): Promise<void>;
+	/** Replaces a credential only if it's still stored (a sync can outlive its account). */
+	updateCredential(c: Credential): Promise<void>;
 	getSyncState(calendarId: string): Promise<SyncState | undefined>;
 	/** One account's queued writes, oldest first. */
 	pendingWrites(accountId: string): Promise<QueuedWrite[]>;
@@ -114,7 +118,7 @@ export interface LocalStore {
 	/**
 	 * Applies one calendar's sync results. With `reset`, the calendar's events are replaced
 	 * (a full resync after the server dropped our sync token). Events with writes still queued
-	 * keep their local version.
+	 * keep their local version. Nothing is written if the account is gone.
 	 */
 	applySync(
 		state: SyncState,
@@ -286,12 +290,13 @@ export function createLocalStore(
 				});
 			});
 		},
-		async upsertAccount(a) {
-			await db.transaction(
+		upsertAccount(a, { create = true } = {}) {
+			return db.transaction(
 				"rw",
 				[db.accounts, db.events, db.syncState],
 				async () => {
 					const existing = await db.accounts.get(a.id);
+					if (!existing && !create) return false;
 					const order =
 						existing?.order ??
 						((await db.accounts.orderBy("order").last())?.order ?? -1) + 1;
@@ -319,6 +324,7 @@ export function createLocalStore(
 						...(problem ? { problem } : {}),
 						...(dropped ? { dropped } : {}),
 					});
+					return true;
 				},
 			);
 		},
@@ -342,12 +348,18 @@ export function createLocalStore(
 		async putCredential(c) {
 			await db.credentials.put(c);
 		},
+		async updateCredential(c) {
+			await db.transaction("rw", db.credentials, async () => {
+				if (await db.credentials.get(c.accountId)) await db.credentials.put(c);
+			});
+		},
 		getSyncState: (calendarId) => db.syncState.get(calendarId),
 		async applySync(state, changes, reset = false) {
 			await db.transaction(
 				"rw",
-				[db.events, db.syncState, db.outbox],
+				[db.events, db.syncState, db.outbox, db.accounts],
 				async () => {
+					if (!(await db.accounts.get(state.accountId))) return;
 					// Our own queued edits win until they're sent; the next sync brings Google's copy.
 					const pending = await pendingIds();
 					const put = changes.put.filter((e) => !pending.has(e.id));
