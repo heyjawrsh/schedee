@@ -1,3 +1,4 @@
+mod feed;
 mod google;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -8,6 +9,7 @@ pub fn run() {
       google::google_sign_in,
       google::google_refresh,
       google::google_forget,
+      feed::fetch_feed,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

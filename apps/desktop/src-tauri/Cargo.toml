@@ -29,3 +29,4 @@ base64 = "0.23.1"
 getrandom = "0.3"
 tauri-plugin-opener = "2"
 keyring = { version = "3", features = ["apple-native"] }
+url = "2"
