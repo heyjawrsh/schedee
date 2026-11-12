@@ -11,6 +11,7 @@
 		"test": "vitest run"
 	},
 	"dependencies": {
+		"ical.js": "2.2.1",
 		"rrule-temporal": "2.2.8",
 		"temporal-polyfill": "1.0.8"
 	},

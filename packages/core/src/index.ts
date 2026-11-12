@@ -37,6 +37,7 @@ export {
 	planGoogleWrites,
 	toGoogleBody,
 } from "./googleWrite";
+export { feedUrl, type ParsedFeed, parseIcs, resolveZone } from "./ics";
 export {
 	type AllDayPlacement,
 	layoutAllDay,
