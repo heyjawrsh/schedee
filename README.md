@@ -57,6 +57,8 @@ Then press ⌘K in the app and choose **Add Google Calendar account**. While the
 
 Edits to synced events go back to Google. Each one is queued on the device with the edit itself and sent in order, so changes made offline go out when the connection returns. If Google refuses one, it's dropped and that calendar reloads from Google.
 
+If an account's sign-in expires or is revoked, a warning shows next to it in the sidebar with **Sign in again** (also in ⌘K). Its calendars stay on screen and queued edits wait until you're back. Refused edits show as a short note under the account.
+
 #### Desktop
 
 The desktop app signs in through your default browser and keeps the refresh token in the system keychain. It talks to Google directly, so it doesn't need the Worker.
