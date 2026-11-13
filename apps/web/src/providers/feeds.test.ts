@@ -63,6 +63,17 @@ describe("feeds", () => {
 		});
 	});
 
+	it("doesn't add the same link twice", async () => {
+		const s = store();
+		await s.ready;
+		answer({ status: 200, body: ics("Shift") });
+		const a = await subscribeFeed(s, "webcal://example.com/rota.ics");
+		const b = await subscribeFeed(s, "https://example.com/rota.ics");
+		expect(b).toBe(a);
+		expect(await s.feeds()).toHaveLength(1);
+		expect((await s.db.accounts.get(FEEDS_ACCOUNT))?.calendars).toHaveLength(1);
+	});
+
 	it("keeps what it has when the feed fails, and says so until it loads again", async () => {
 		const s = store();
 		await s.ready;

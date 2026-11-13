@@ -123,13 +123,21 @@ export async function refreshFeeds(
 	await Promise.all(due.map((f) => refreshFeed(store, f)));
 }
 
-/** Adds a feed and loads it. Rejects input that isn't a web link. */
+/**
+ * Adds a feed and loads it. Rejects input that isn't a web link. A link that's already
+ * subscribed isn't added twice; it just refreshes.
+ */
 export async function subscribeFeed(
 	store: LocalStore,
 	input: string,
 ): Promise<string> {
 	const url = feedUrl(input);
 	if (!url) throw new FeedError("bad_url");
+	const known = (await store.feeds()).find((f) => f.url === url);
+	if (known) {
+		await refreshFeed(store, known);
+		return known.calendarId;
+	}
 	const calendarId = `ics:${randomHex(8)}`;
 	await dropDemo(store);
 	await store.addFeed(
