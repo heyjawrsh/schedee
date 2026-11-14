@@ -71,6 +71,12 @@ The desktop app signs in through your default browser and keeps the refresh toke
 
 Unsigned dev builds may ask for keychain access after each rebuild; choose **Always Allow**.
 
+### Calendar feeds
+
+Press ⌘K and choose **Subscribe to calendar feed**, then paste a `webcal://` or `https://` link (holidays, sports fixtures, a shared calendar's secret address). Feeds are read-only and sit under **Subscriptions** in the sidebar. They refresh about once an hour, or as often as the feed asks but no more than every 15 minutes. If a feed can't be loaded, a warning shows on its row and the last copy stays on screen.
+
+The web build fetches feeds through the Worker, since feeds don't allow browsers to load them directly. The desktop app fetches them itself. Both only reach public hosts and never log the link, which often holds a secret. Subscriptions are kept per device for now ([#25](https://github.com/heyjawrsh/schedee/issues/25)).
+
 ## License
 
 [AGPL-3.0](LICENSE). If you run a modified Schedee as a service, you share your changes.
