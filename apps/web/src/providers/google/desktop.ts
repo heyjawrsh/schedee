@@ -37,3 +37,23 @@ export const desktopRefresh = (accountId: string) =>
 /** Drops an account's refresh token from the keychain. */
 export const desktopForget = (accountId: string) =>
 	call<void>("google_forget", { accountId });
+
+/** What a feed fetch brings back; 304 has no body. */
+export interface FeedResponse {
+	status: number;
+	body?: string;
+	etag?: string;
+	lastModified?: string;
+}
+
+/** Fetches an ICS feed from Rust, where CORS doesn't apply. */
+export const desktopFetchFeed = (
+	url: string,
+	etag?: string,
+	lastModified?: string,
+) =>
+	call<FeedResponse>("fetch_feed", {
+		url,
+		etag: etag ?? null,
+		lastModified: lastModified ?? null,
+	});

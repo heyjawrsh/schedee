@@ -279,6 +279,15 @@
 	width: 20px;
 	height: 20px;
 }
+/* A calendar that can't load: our own design, not from the reference. */
+.sch-calrow__alert {
+	position: absolute;
+	right: 9px;
+	color: var(--accent);
+}
+.sch-calrow--hidden .sch-calrow__alert {
+	right: 32px;
+}
 .sch-sidebar__footer {
 	position: absolute;
 	left: 0;

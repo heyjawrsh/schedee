@@ -13,6 +13,7 @@ import {
 	SYNC_EVERY_MS,
 	syncAll,
 } from "./providers/accounts";
+import { subscribeFeed, unsubscribeFeed } from "./providers/feeds";
 import { createLocalStore, type LocalStore } from "./store/db";
 
 declare global {
@@ -143,6 +144,14 @@ export function App() {
 						onRemoveAccount: (id: string) =>
 							void removeAccount(store, id).catch((e: unknown) =>
 								console.warn("Removing the account failed:", e),
+							),
+						onSubscribeFeed: (url: string) =>
+							void subscribeFeed(store, url).catch((e: unknown) =>
+								console.warn("Subscribing failed:", e),
+							),
+						onUnsubscribeFeed: (id: string) =>
+							void unsubscribeFeed(store, id).catch((e: unknown) =>
+								console.warn("Unsubscribing failed:", e),
 							),
 						onDismissDropped: (id: string) => void store.dismissDropped(id),
 					}

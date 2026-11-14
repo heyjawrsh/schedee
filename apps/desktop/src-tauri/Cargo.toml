@@ -1,6 +1,6 @@
 [package]
 name = "schedee"
-version = "0.11.0"
+version = "0.12.0"
 description = "Schedee desktop shell"
 authors = ["Joshua Butner"]
 license = "AGPL-3.0-only"
@@ -23,9 +23,10 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.10.3", features = [] }
 tauri-plugin-log = "2"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "charset"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "charset", "gzip", "brotli", "deflate"] }
 sha2 = "0.10.9"
 base64 = "0.23.1"
 getrandom = "0.3"
 tauri-plugin-opener = "2"
 keyring = { version = "3", features = ["apple-native"] }
+url = "2"

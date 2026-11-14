@@ -1,6 +1,7 @@
 import type { Account } from "@schedee/core";
 import { demoSeed } from "../demo";
 import type { LocalStore } from "../store/db";
+import { refreshFeeds } from "./feeds";
 import { GoogleAuthError, signInWithGoogle } from "./google/auth";
 import { desktopForget, desktopSignIn, isDesktop } from "./google/desktop";
 import { flushGoogleAccount, problemFor } from "./google/outbox";
@@ -14,6 +15,12 @@ export const AUTH_URL: string =
 export const SYNC_EVERY_MS = 5 * 60_000;
 
 const DEMO_ACCOUNTS = new Set(demoSeed().accounts.map((a) => a.id));
+
+/** The demo calendars are only there until a real account or feed arrives. */
+export async function dropDemo(store: LocalStore): Promise<void> {
+	for (const a of await store.db.accounts.toArray())
+		if (!a.provider && DEMO_ACCOUNTS.has(a.id)) await store.removeAccount(a.id);
+}
 
 /**
  * Signs in to Google (a popup on the web, the system browser on desktop), stores the tokens,
@@ -48,10 +55,8 @@ export async function addGoogleAccount(
 		accessToken: tokens.accessToken,
 		expiresAt: tokens.expiresAt,
 	});
-	// The demo calendars are only there until a real account arrives.
+	await dropDemo(store);
 	const existing = await store.db.accounts.toArray();
-	for (const a of existing)
-		if (!a.provider && DEMO_ACCOUNTS.has(a.id)) await store.removeAccount(a.id);
 	// A known account keeps its calendars and events; the sync below brings them up to date.
 	if (!existing.some((a) => a.id === account.id))
 		await store.upsertAccount(account);
@@ -111,8 +116,11 @@ export function syncAll(store: LocalStore): Promise<void> {
 
 async function syncOnce(store: LocalStore): Promise<void> {
 	const accounts = await store.db.accounts.toArray();
-	await Promise.all(
-		accounts
+	await Promise.all([
+		refreshFeeds(store).catch((e: unknown) =>
+			console.warn("Refreshing feeds failed:", e),
+		),
+		...accounts
 			.filter((a) => a.provider === "google")
 			.map(async (a) => {
 				try {
@@ -132,5 +140,5 @@ async function syncOnce(store: LocalStore): Promise<void> {
 					console.warn(`Sync failed for ${a.label}: ${why}`);
 				}
 			}),
-	);
+	]);
 }

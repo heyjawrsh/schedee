@@ -1,7 +1,9 @@
 /**
- * Stateless auth helper for the web build. It turns OAuth codes into tokens and refreshes them,
- * holding the client secret the browser must not see. It stores nothing and logs no bodies.
+ * Stateless helper for the web build. It turns OAuth codes into tokens and refreshes them,
+ * holding the client secret the browser must not see, and fetches ICS feeds that send no CORS
+ * headers. It stores nothing and logs no bodies or feed URLs.
  */
+import { fetchFeed } from "./feed";
 import { GOOGLE_AUTH, GOOGLE_SCOPES, GOOGLE_TOKEN } from "./google";
 
 export interface Env {
@@ -135,15 +137,32 @@ export default {
 		if (route === "GET /oauth/google/start") return start(request, env);
 		if (route === "GET /oauth/google/callback") return callback(request, env);
 
-		const tokenRoute =
+		const appRoute =
 			url.pathname === "/oauth/google/token" ||
-			url.pathname === "/oauth/google/refresh";
-		if (tokenRoute) {
-			// Only the app may spend our client credentials.
+			url.pathname === "/oauth/google/refresh" ||
+			url.pathname === "/feed";
+		if (appRoute) {
+			// Only the app may spend our client credentials or use us to fetch feeds.
 			if (request.headers.get("Origin") !== env.APP_ORIGIN)
 				return json({ error: "forbidden" }, 403);
 			if (request.method === "OPTIONS")
 				return new Response(null, { status: 204, headers: cors(env) });
+			if (request.method === "POST" && url.pathname === "/feed") {
+				let body: Record<string, unknown>;
+				try {
+					body = (await request.json()) as Record<string, unknown>;
+				} catch {
+					return json({ error: "bad_url" }, 400, cors(env));
+				}
+				const r = await fetchFeed(body as { url: unknown });
+				const status =
+					"error" in r
+						? r.error === "unreachable" || r.error === "upstream"
+							? 502
+							: 400
+						: 200;
+				return json(r, status, { "Cache-Control": "no-store", ...cors(env) });
+			}
 			if (request.method === "POST")
 				return token(
 					request,
