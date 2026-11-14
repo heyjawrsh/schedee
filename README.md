@@ -73,12 +73,12 @@ Unsigned dev builds may ask for keychain access after each rebuild; choose **Alw
 
 ### iCloud and CalDAV (desktop)
 
-The desktop app reads iCloud calendars and other CalDAV servers. Browsers can't reach CalDAV servers directly, so the web build doesn't offer this.
+The desktop app reads and edits iCloud calendars and other CalDAV servers. Browsers can't reach CalDAV servers directly, so the web build doesn't offer this.
 
 1. For iCloud, create an app-specific password at [account.apple.com](https://account.apple.com/account/manage) under **Sign-In and Security → App-Specific Passwords**.
 2. Press ⌘K and choose **Add iCloud account** (Apple ID, then that password) or **Add CalDAV account** (server address, username, password).
 
-The login lives in the system keychain. Rust adds it to each request and only sends it to that account's server. Calendars are read-only for now. They sync incrementally, and a calendar that hasn't changed isn't fetched again.
+The login lives in the system keychain. Rust adds it to each request and only sends it to that account's server. Calendars sync incrementally, and a calendar that hasn't changed isn't fetched again. Edits go back one event at a time and only rewrite the fields you changed. If an event changed on another device first, your edit is dropped and the account shows a note. Calendars shared with you read-only stay read-only.
 
 ### Calendar feeds
 
