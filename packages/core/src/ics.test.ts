@@ -17,6 +17,34 @@ const vevent = (...lines: string[]) =>
 const parse = (text: string) => parseIcs(text, "ics:rota", "America/Chicago");
 
 describe("parseIcs", () => {
+	it("names a series and its overrides after a given key", () => {
+		const { events } = parseIcs(
+			feed(
+				vevent(
+					"UID:a@x",
+					"SUMMARY:Standup",
+					"DTSTART:20261112T150000Z",
+					"DTEND:20261112T153000Z",
+					"RRULE:FREQ=DAILY",
+				),
+				vevent(
+					"UID:a@x",
+					"SUMMARY:Standup (moved)",
+					"RECURRENCE-ID:20261113T150000Z",
+					"DTSTART:20261113T160000Z",
+					"DTEND:20261113T163000Z",
+				),
+			),
+			"caldav:a/home",
+			"America/Chicago",
+			"A1.ics",
+		);
+		expect(events.map((e) => [e.id, e.recurringEventId])).toEqual([
+			["caldav:a/home#A1.ics", undefined],
+			["caldav:a/home#A1.ics~2026-11-13T09:00:00", "caldav:a/home#A1.ics"],
+		]);
+	});
+
 	it("reads the feed's name, color and refresh interval", () => {
 		const f = parse(feed());
 		expect(f).toMatchObject({

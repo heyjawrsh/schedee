@@ -57,3 +57,37 @@ export const desktopFetchFeed = (
 		etag: etag ?? null,
 		lastModified: lastModified ?? null,
 	});
+
+/** What a WebDAV request through Rust brings back. */
+export interface DavResponse {
+	status: number;
+	body: string;
+	/** Where it ended up after redirects. */
+	url: string;
+}
+
+/** Saves a CalDAV login to the keychain; the password never comes back out. */
+export const desktopCalDavSave = (
+	accountId: string,
+	login: { server: string; username: string; password: string },
+) => call<void>("caldav_save", { accountId, ...login });
+
+/** Drops a CalDAV login from the keychain. */
+export const desktopCalDavForget = (accountId: string) =>
+	call<void>("caldav_forget", { accountId });
+
+/** One WebDAV request, sent from Rust with the account's login. */
+export const desktopDav = (
+	accountId: string,
+	method: "PROPFIND" | "REPORT" | "GET",
+	url: string,
+	depth?: "0" | "1",
+	body?: string,
+) =>
+	call<DavResponse>("caldav_request", {
+		accountId,
+		method,
+		url,
+		depth: depth ?? null,
+		body: body ?? null,
+	});

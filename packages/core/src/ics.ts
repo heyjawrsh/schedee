@@ -169,6 +169,11 @@ export function parseIcs(
 	calendarId: string,
 	/** Stands in for floating times and zones we can't name. */
 	fallbackZone: string,
+	/**
+	 * Names events after this key instead of their UID: a CalDAV resource holds one series, and
+	 * its key is how a later sync finds it again.
+	 */
+	key?: string,
 ): ParsedFeed {
 	const cal = new ICAL.Component(ICAL.parse(text));
 	const name = cal.getFirstPropertyValue("x-wr-calname");
@@ -187,7 +192,7 @@ export function parseIcs(
 	];
 	for (const v of ordered) {
 		try {
-			const e = mapVevent(v, calendarId, fallbackZone, seriesZone);
+			const e = mapVevent(v, calendarId, fallbackZone, seriesZone, key);
 			if (!e) continue;
 			// Broken feeds reuse UIDs; keep every event.
 			const n = seen.get(e.id) ?? 0;
@@ -211,10 +216,11 @@ function mapVevent(
 	calendarId: string,
 	fallback: string,
 	seriesZone: Map<string, { zone: string; allDay: boolean }>,
+	key: string | undefined,
 ): CalendarEvent | null {
 	const ev = new ICAL.Event(v);
 	if (!ev.uid || !ev.startDate) return null;
-	const seriesId = `${calendarId}#${ev.uid}`;
+	const seriesId = `${calendarId}#${key ?? ev.uid}`;
 	const startProp = v.getFirstProperty("dtstart");
 	const start = ev.startDate;
 	const allDay = start.isDate;

@@ -26,6 +26,10 @@ export interface Credential {
 	accessToken?: string;
 	/** Epoch ms. */
 	expiresAt?: number;
+	/** CalDAV: the server signed in to (the login itself is in the keychain). */
+	server?: string;
+	/** CalDAV: where the account's calendars live, found once at sign-in. */
+	home?: string;
 }
 
 /** Where incremental sync left off for one calendar. */
@@ -33,6 +37,8 @@ export interface SyncState {
 	calendarId: string;
 	accountId: string;
 	syncToken?: string;
+	/** CalDAV: the calendar's change tag last time; unchanged means nothing to fetch. */
+	ctag?: string;
 	syncedAt?: number;
 }
 

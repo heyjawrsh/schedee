@@ -71,6 +71,15 @@ The desktop app signs in through your default browser and keeps the refresh toke
 
 Unsigned dev builds may ask for keychain access after each rebuild; choose **Always Allow**.
 
+### iCloud and CalDAV (desktop)
+
+The desktop app reads iCloud calendars and other CalDAV servers. Browsers can't reach CalDAV servers directly, so the web build doesn't offer this.
+
+1. For iCloud, create an app-specific password at [account.apple.com](https://account.apple.com/account/manage) under **Sign-In and Security → App-Specific Passwords**.
+2. Press ⌘K and choose **Add iCloud account** (Apple ID, then that password) or **Add CalDAV account** (server address, username, password).
+
+The login lives in the system keychain. Rust adds it to each request and only sends it to that account's server. Calendars are read-only for now. They sync incrementally, and a calendar that hasn't changed isn't fetched again.
+
 ### Calendar feeds
 
 Press ⌘K and choose **Subscribe to calendar feed**, then paste a `webcal://` or `https://` link (holidays, sports fixtures, a shared calendar's secret address). Feeds are read-only and sit under **Subscriptions** in the sidebar. They refresh about once an hour, or as often as the feed asks but no more than every 15 minutes. If a feed can't be loaded, a warning shows on its row and the last copy stays on screen.

@@ -85,6 +85,46 @@ describe("command list", () => {
 		expect(gone).toEqual(["ics:1"]);
 	});
 
+	it("asks for an Apple ID, then a hidden password, and waits on the check", async () => {
+		const logins: unknown[] = [];
+		const { item } = setup({
+			onAddCalDav: async (login) => {
+				logins.push(login);
+				return login.password === "abcd-efgh-ijkl-mnop";
+			},
+		});
+		const email = item("add-icloud").prompt;
+		expect(email?.submit("ada")).toBe(false);
+		const next = email?.submit(" ada@example.com ");
+		if (typeof next !== "object" || next instanceof Promise)
+			throw new Error("expected the password step");
+		expect(next.prompt?.secret).toBe(true);
+		expect(next.prompt?.submit("  ")).toBe(false);
+		expect(await next.prompt?.submit("wrong")).toBe(false);
+		expect(await next.prompt?.submit("abcd-efgh-ijkl-mnop")).toBe(true);
+		expect(logins.at(-1)).toEqual({
+			username: "ada@example.com",
+			password: "abcd-efgh-ijkl-mnop",
+		});
+	});
+
+	it("asks a signed-out CalDAV account for its password again", async () => {
+		const calls: [string, string][] = [];
+		const { item } = setup({
+			signedOut: [
+				{ id: "caldav:ada", label: "ada@example.com", provider: "caldav" },
+			],
+			onReconnectCalDav: async (id, pw) => {
+				calls.push([id, pw]);
+				return true;
+			},
+		});
+		const again = item("reconnect-caldav:ada");
+		expect(again.prompt?.secret).toBe(true);
+		expect(await again.prompt?.submit("new")).toBe(true);
+		expect(calls).toEqual([["caldav:ada", "new"]]);
+	});
+
 	it("only offers what can be done", () => {
 		const labels = setup().groups.map((g) => g.label);
 		expect(labels).toEqual(["Navigation", "View"]);
