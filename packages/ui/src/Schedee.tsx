@@ -28,7 +28,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CommandMenu } from "./CommandMenu";
 import { ContextPanel } from "./ContextPanel";
 import type { Theme } from "./chipColors";
-import { buildCommands, type ThemeChoice } from "./commands";
+import { buildCommands, type CalDavLogin, type ThemeChoice } from "./commands";
 import { DaysView } from "./DaysView";
 import { EventPanel } from "./EventPanel";
 import { Header } from "./Header";
@@ -81,6 +81,10 @@ export interface SchedeeProps {
 	onAddAccount?: () => void;
 	/** Sign an account in again after its sign-in expired. */
 	onReconnect?: (accountId: string) => void;
+	/** Add an iCloud or other CalDAV account. Without it the menu doesn't offer one. */
+	onAddCalDav?: (login: CalDavLogin) => Promise<boolean>;
+	/** Sign a CalDAV account in again with a new password. */
+	onReconnectCalDav?: (accountId: string, password: string) => Promise<boolean>;
 	/** Remove a synced account from this device. Without it the menu doesn't offer to. */
 	onRemoveAccount?: (accountId: string) => void;
 	/** Subscribe to an ICS feed. Without it the menu doesn't offer to. */
@@ -104,6 +108,8 @@ export function Schedee({
 	onCalendarVisibility,
 	onAddAccount,
 	onReconnect,
+	onAddCalDav,
+	onReconnectCalDav,
 	onRemoveAccount,
 	onSubscribeFeed,
 	onUnsubscribeFeed,
@@ -186,7 +192,7 @@ export function Schedee({
 	const selected = instances.find((i) => i.id === selectedId) ?? null;
 	const selectedCal = selected ? calendars.get(selected.calendarId) : undefined;
 	const writable = useMemo(
-		() => [...calendars.values()].filter((c) => !c.subscribed),
+		() => [...calendars.values()].filter((c) => !c.subscribed && !c.readOnly),
 		[calendars],
 	);
 	/** Subscribed calendars and events someone else organizes can't be changed here. */
@@ -196,6 +202,7 @@ export function Schedee({
 			!!onCommit &&
 			!!cal &&
 			!cal.subscribed &&
+			!cal.readOnly &&
 			!i.attendees?.some((a) => a.organizer && !a.self)
 		);
 	};
@@ -281,7 +288,11 @@ export function Schedee({
 		onAddAccount,
 		signedOut: snapshot.accounts.filter((a) => a.problem === "signed_out"),
 		onReconnect,
-		removable: snapshot.accounts.filter((a) => a.provider === "google"),
+		onAddCalDav,
+		onReconnectCalDav,
+		removable: snapshot.accounts.filter(
+			(a) => a.provider === "google" || a.provider === "caldav",
+		),
 		onRemoveAccount,
 		onSubscribeFeed,
 		feeds: snapshot.accounts
@@ -291,6 +302,17 @@ export function Schedee({
 		theme: themeChoice,
 		onTheme,
 	});
+
+	// A CalDAV account signs in again with a password, asked for in the menu.
+	const reconnect =
+		onReconnect || onReconnectCalDav
+			? (id: string) => {
+					const a = snapshot.accounts.find((x) => x.id === id);
+					if (a?.provider === "caldav") {
+						if (onReconnectCalDav) setMenu({ start: `reconnect-${id}` });
+					} else onReconnect?.(id);
+				}
+			: undefined;
 
 	// Keyboard actions read the latest render through this ref.
 	const actions = useRef({
@@ -403,7 +425,7 @@ export function Schedee({
 				focus={view.anchor}
 				{...(view.kind === "month" ? {} : { band: weekOf(first).start })}
 				onPickDate={(d) => setViewState((v) => goTo(v, d))}
-				onReconnect={onReconnect}
+				onReconnect={reconnect}
 				onDismissDropped={onDismissDropped}
 			/>
 			<main className="sch-main" ref={mainRef}>

@@ -9,7 +9,11 @@ export {
 } from "./CommandMenu";
 export { ContextPanel } from "./ContextPanel";
 export { type ChipColors, chipColors, type Theme } from "./chipColors";
-export { buildCommands, type ThemeChoice } from "./commands";
+export {
+	buildCommands,
+	type CalDavLogin,
+	type ThemeChoice,
+} from "./commands";
 export { DaysView, type DaysViewProps } from "./DaysView";
 export { formatRange, formatTime } from "./format";
 export * from "./geometry";

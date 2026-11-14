@@ -3,17 +3,26 @@ import {
 	type EditResult,
 	Temporal,
 } from "@schedee/core";
-import { Schedee, type Theme, type ThemeChoice } from "@schedee/ui";
+import {
+	type CalDavLogin,
+	Schedee,
+	type Theme,
+	type ThemeChoice,
+} from "@schedee/ui";
 import { useEffect, useState } from "react";
 import { demoSeed } from "./demo";
 import {
+	addCalDavAccount,
 	addGoogleAccount,
+	reconnectCalDavAccount,
 	reconnectGoogleAccount,
 	removeAccount,
 	SYNC_EVERY_MS,
 	syncAll,
 } from "./providers/accounts";
+import { ICLOUD_SERVER } from "./providers/caldav/sync";
 import { subscribeFeed, unsubscribeFeed } from "./providers/feeds";
+import { isDesktop } from "./providers/google/desktop";
 import { createLocalStore, type LocalStore } from "./store/db";
 
 declare global {
@@ -141,6 +150,26 @@ export function App() {
 							void reconnectGoogleAccount(store, id).catch((e: unknown) =>
 								console.warn("Signing in again failed:", e),
 							),
+						// iCloud and other CalDAV servers are desktop-only: browsers can't reach them.
+						...(isDesktop()
+							? {
+									onAddCalDav: (login: CalDavLogin) =>
+										addCalDavAccount(store, {
+											...login,
+											server: login.server ?? ICLOUD_SERVER,
+										}).catch((e: unknown) => {
+											console.warn("Adding the CalDAV account failed:", e);
+											return false;
+										}),
+									onReconnectCalDav: (id: string, password: string) =>
+										reconnectCalDavAccount(store, id, password).catch(
+											(e: unknown) => {
+												console.warn("Signing in again failed:", e);
+												return false;
+											},
+										),
+								}
+							: {}),
 						onRemoveAccount: (id: string) =>
 							void removeAccount(store, id).catch((e: unknown) =>
 								console.warn("Removing the account failed:", e),

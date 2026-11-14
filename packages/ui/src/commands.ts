@@ -12,6 +12,13 @@ import type { CommandGroup, CommandItem } from "./CommandMenu";
 
 export type ThemeChoice = "light" | "dark" | "system";
 
+/** A CalDAV sign-in. No server means iCloud. */
+export interface CalDavLogin {
+	server?: string;
+	username: string;
+	password: string;
+}
+
 export interface CommandContext {
 	view: ViewState;
 	today: Temporal.PlainDate;
@@ -26,8 +33,16 @@ export interface CommandContext {
 	onTheme?: ((t: ThemeChoice) => void) | undefined;
 	onAddAccount?: (() => void) | undefined;
 	/** Accounts whose sign-in expired, for "Sign in again". */
-	signedOut?: { id: string; label: string }[] | undefined;
+	signedOut?:
+		| { id: string; label: string; provider?: string | undefined }[]
+		| undefined;
 	onReconnect?: ((accountId: string) => void) | undefined;
+	/** Adds an iCloud or other CalDAV account; resolves false when the login is turned down. */
+	onAddCalDav?: ((login: CalDavLogin) => Promise<boolean>) | undefined;
+	/** Signs a CalDAV account in again with a new password. */
+	onReconnectCalDav?:
+		| ((accountId: string, password: string) => Promise<boolean>)
+		| undefined;
 	/** Synced accounts the user can remove from this device. */
 	removable?: { id: string; label: string }[] | undefined;
 	onRemoveAccount?: ((accountId: string) => void) | undefined;
@@ -37,6 +52,25 @@ export interface CommandContext {
 	feeds?: { id: string; name: string }[] | undefined;
 	onUnsubscribeFeed?: ((calendarId: string) => void) | undefined;
 }
+
+/** A masked prompt that waits on `send` and asks again if it's turned down. */
+const password = (
+	placeholder: string,
+	send: (password: string) => Promise<boolean>,
+): NonNullable<CommandItem["prompt"]> => ({
+	placeholder,
+	secret: true,
+	submit: (text) => (text.trim() ? send(text.trim()) : false),
+});
+
+const httpsUrl = (text: string) => {
+	try {
+		const u = new URL(text.trim());
+		return u.protocol === "https:" ? u.toString() : null;
+	} catch {
+		return null;
+	}
+};
 
 const UNIT: Record<ViewState["kind"], string> = {
 	day: "day",
@@ -148,14 +182,23 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 	}
 
 	const accounts: CommandItem[] = [];
-	if (c.onReconnect) {
-		const reconnect = c.onReconnect;
-		for (const a of c.signedOut ?? [])
-			accounts.push({
-				id: `reconnect-${a.id}`,
-				label: `Sign in again: ${a.label}`,
-				run: () => reconnect(a.id),
-			});
+	for (const a of c.signedOut ?? []) {
+		const id = `reconnect-${a.id}`;
+		const label = `Sign in again: ${a.label}`;
+		if (a.provider === "caldav") {
+			const reconnect = c.onReconnectCalDav;
+			if (reconnect)
+				accounts.push({
+					id,
+					label,
+					prompt: password(`Password for ${a.label}...`, (pw) =>
+						reconnect(a.id, pw),
+					),
+				});
+		} else if (c.onReconnect) {
+			const reconnect = c.onReconnect;
+			accounts.push({ id, label, run: () => reconnect(a.id) });
+		}
 	}
 	if (c.onAddAccount)
 		accounts.push({
@@ -163,6 +206,57 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 			label: "Add Google Calendar account",
 			run: c.onAddAccount,
 		});
+	if (c.onAddCalDav) {
+		const add = c.onAddCalDav;
+		accounts.push({
+			id: "add-icloud",
+			label: "Add iCloud account…",
+			prompt: {
+				placeholder: "Your Apple ID email...",
+				submit: (text) => {
+					const username = text.trim();
+					if (!username.includes("@")) return false;
+					return {
+						id: "add-icloud-password",
+						label: "App-specific password",
+						prompt: password(
+							"App-specific password (from account.apple.com)...",
+							(pw) => add({ username, password: pw }),
+						),
+					};
+				},
+			},
+		});
+		accounts.push({
+			id: "add-caldav",
+			label: "Add CalDAV account…",
+			prompt: {
+				placeholder: "Server address (https://)...",
+				submit: (text) => {
+					const server = httpsUrl(text);
+					if (!server) return false;
+					return {
+						id: "add-caldav-user",
+						label: "Username",
+						prompt: {
+							placeholder: "Username...",
+							submit: (name) => {
+								const username = name.trim();
+								if (!username) return false;
+								return {
+									id: "add-caldav-password",
+									label: "Password",
+									prompt: password("Password...", (pw) =>
+										add({ server, username, password: pw }),
+									),
+								};
+							},
+						},
+					};
+				},
+			},
+		});
+	}
 	if (c.onRemoveAccount) {
 		const remove = c.onRemoveAccount;
 		for (const a of c.removable ?? [])
