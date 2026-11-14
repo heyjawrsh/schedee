@@ -5,12 +5,22 @@ import {
 } from "@schedee/core";
 import {
 	type CalDavLogin,
+	type GlobalAction,
 	Schedee,
 	type Theme,
 	type ThemeChoice,
 } from "@schedee/ui";
 import { useEffect, useState } from "react";
 import { demoSeed } from "./demo";
+import {
+	launchAtLogin,
+	onNewEventShortcut,
+	registerShortcuts,
+	savedShortcuts,
+	setLaunchAtLogin,
+	setShortcut,
+	shortcutLabel,
+} from "./desktop";
 import {
 	addCalDavAccount,
 	addGoogleAccount,
@@ -119,10 +129,49 @@ function useLiveSnapshot(
 	];
 }
 
+const labels = () => {
+	const keys = savedShortcuts();
+	return {
+		show: shortcutLabel(keys.show),
+		"new-event": shortcutLabel(keys["new-event"]),
+	};
+};
+
+/** Desktop: opening at login, and the system-wide shortcuts with what they ask for. */
+function useDesktop(enabled: boolean) {
+	const [atLogin, setAtLogin] = useState(false);
+	const [shortcuts, setShortcuts] = useState(labels);
+	const [createRequest, setCreateRequest] = useState(0);
+	useEffect(() => {
+		if (!enabled) return;
+		void launchAtLogin().then(setAtLogin);
+		void registerShortcuts();
+		return onNewEventShortcut(() => setCreateRequest((n) => n + 1));
+	}, [enabled]);
+	if (!enabled) return {};
+	return {
+		launchAtLogin: atLogin,
+		onLaunchAtLogin: (on: boolean) =>
+			void setLaunchAtLogin(on)
+				.then(() => setAtLogin(on))
+				.catch((e: unknown) =>
+					console.warn("Couldn't change opening at login:", e),
+				),
+		globalShortcuts: shortcuts,
+		onGlobalShortcut: async (action: GlobalAction, keys: string) => {
+			const ok = await setShortcut(action, keys);
+			if (ok) setShortcuts(labels());
+			return ok;
+		},
+		createRequest,
+	};
+}
+
 export function App() {
 	const injected = window.__SCHEDEE_SNAPSHOT__ ?? null;
 	const [live, store] = useLiveSnapshot(!injected);
 	const [theme, themeChoice, setThemeChoice] = useTheme();
+	const desktop = useDesktop(!injected && isDesktop());
 	const snapshot = injected ?? live;
 	if (!snapshot) return null;
 	return (
@@ -134,6 +183,7 @@ export function App() {
 				: {})}
 			themeChoice={themeChoice}
 			onTheme={setThemeChoice}
+			{...desktop}
 			{...(store && !injected
 				? {
 						onCommit: (r: EditResult) =>

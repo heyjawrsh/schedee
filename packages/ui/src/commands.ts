@@ -3,6 +3,7 @@ import {
 	feedUrl,
 	goTo,
 	parseDate,
+	parseKeys,
 	setView,
 	step,
 	type Temporal,
@@ -11,6 +12,14 @@ import {
 import type { CommandGroup, CommandItem } from "./CommandMenu";
 
 export type ThemeChoice = "light" | "dark" | "system";
+
+/** System-wide shortcuts the desktop app offers. */
+export type GlobalAction = "show" | "new-event";
+
+const GLOBAL_LABELS: Record<GlobalAction, string> = {
+	show: "show or hide Schedee",
+	"new-event": "create an event",
+};
 
 /** A CalDAV sign-in. No server means iCloud. */
 export interface CalDavLogin {
@@ -51,6 +60,18 @@ export interface CommandContext {
 	/** Feed subscriptions the user can remove. */
 	feeds?: { id: string; name: string }[] | undefined;
 	onUnsubscribeFeed?: ((calendarId: string) => void) | undefined;
+	/** Desktop: whether Schedee opens when the user logs in. */
+	launchAtLogin?: boolean | undefined;
+	onLaunchAtLogin?: ((on: boolean) => void) | undefined;
+	/** Desktop: each system-wide shortcut's keys as shown ("⌃⌥⌘S"), or "" when off. */
+	globalShortcuts?: Record<GlobalAction, string> | undefined;
+	/**
+	 * Sets a system-wide shortcut from typed keys ("" turns it off). Resolves false when the keys
+	 * can't be used, like when another app has them.
+	 */
+	onGlobalShortcut?:
+		| ((action: GlobalAction, keys: string) => Promise<boolean>)
+		| undefined;
 }
 
 /** A masked prompt that waits on `send` and asks again if it's turned down. */
@@ -146,6 +167,7 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 		],
 	});
 
+	const app: CommandItem[] = [];
 	if (c.onTheme) {
 		const pick = c.onTheme;
 		const choice = (t: ThemeChoice, label: string): CommandItem => ({
@@ -153,21 +175,44 @@ export function buildCommands(c: CommandContext): CommandGroup[] {
 			label: c.theme === t ? `${label} (current)` : label,
 			run: () => pick(t),
 		});
-		groups.push({
-			label: "App",
+		app.push({
+			id: "theme",
+			label: "Set theme…",
 			items: [
-				{
-					id: "theme",
-					label: "Set theme…",
-					items: [
-						choice("system", "Use system setting"),
-						choice("light", "Light"),
-						choice("dark", "Dark"),
-					],
-				},
+				choice("system", "Use system setting"),
+				choice("light", "Light"),
+				choice("dark", "Dark"),
 			],
 		});
 	}
+	if (c.onLaunchAtLogin) {
+		const set = c.onLaunchAtLogin;
+		const on = !!c.launchAtLogin;
+		app.push({
+			id: "launch-at-login",
+			label: on ? "Don't open Schedee at login" : "Open Schedee at login",
+			run: () => set(!on),
+		});
+	}
+	if (c.onGlobalShortcut && c.globalShortcuts) {
+		const set = c.onGlobalShortcut;
+		for (const action of ["show", "new-event"] as const) {
+			const current = c.globalShortcuts[action];
+			app.push({
+				id: `global-${action}`,
+				label: `Change shortcut to ${GLOBAL_LABELS[action]}…${current ? ` (${current})` : ""}`,
+				prompt: {
+					placeholder: "Type keys like Ctrl+Option+Cmd+S, or “off”...",
+					submit: (text) => {
+						const t = text.trim();
+						if (/^(off|none)$/i.test(t)) return set(action, "");
+						return parseKeys(t) ? set(action, t) : false;
+					},
+				},
+			});
+		}
+	}
+	if (app.length) groups.push({ label: "App", items: app });
 
 	if (c.onCalendarVisibility) {
 		const toggle = c.onCalendarVisibility;
