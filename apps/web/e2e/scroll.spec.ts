@@ -8,14 +8,15 @@ test("the time grid scrolls to any hour", async ({ page }) => {
 	const hour = (label: string) =>
 		page.locator(".sch-hour", { hasText: new RegExp(`^${label}$`) });
 
-	await grid.hover();
-	await page.mouse.wheel(0, -2000);
-	await expect.poll(() => grid.evaluate((g) => g.scrollTop)).toBe(0);
+	// Chromium can drop a wheel event, so keep scrolling until the end is reached.
+	const scroll = async (dy: number) => {
+		await grid.hover();
+		await page.mouse.wheel(0, dy);
+		return grid.evaluate((g) => [g.scrollTop, g.scrollTop + g.clientHeight]);
+	};
+	await expect.poll(async () => (await scroll(-2000))[0]).toBe(0);
 	await expect(hour("1AM")).toBeInViewport();
 
-	await page.mouse.wheel(0, 2000);
-	await expect
-		.poll(() => grid.evaluate((g) => g.scrollTop + g.clientHeight))
-		.toBe(1152);
+	await expect.poll(async () => (await scroll(2000))[1]).toBe(1152);
 	await expect(hour("11PM")).toBeInViewport();
 });
