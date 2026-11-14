@@ -80,6 +80,10 @@ The desktop app reads and edits iCloud calendars and other CalDAV servers. Brows
 
 The login lives in the system keychain. Rust adds it to each request and only sends it to that account's server. Calendars sync incrementally, and a calendar that hasn't changed isn't fetched again. Edits go back one event at a time and only rewrite the fields you changed. If an event changed on another device first, your edit is dropped and the account shows a note. Calendars shared with you read-only stay read-only.
 
+### Desktop shortcuts and login
+
+The desktop app adds two shortcuts that work from any app: ⌃⌥⌘S shows or hides Schedee, and ⌃⌥⌘N starts a new event today. Change either from the command menu (⌘K, then "shortcut"), or type `off`. Keys another app already uses are turned down. The command menu also turns **Open Schedee at login** on and off.
+
 ### Calendar feeds
 
 Press ⌘K and choose **Subscribe to calendar feed**, then paste a `webcal://` or `https://` link (holidays, sports fixtures, a shared calendar's secret address). Feeds are read-only and sit under **Subscriptions** in the sidebar. They refresh about once an hour, or as often as the feed asks but no more than every 15 minutes. If a feed can't be loaded, a warning shows on its row and the last copy stays on screen.
