@@ -13,6 +13,7 @@ import {
 	type ReactNode,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useRef,
 	useState,
 } from "react";
@@ -301,6 +302,7 @@ export function DaysView({
 }: DaysViewProps) {
 	const sel: Selectable = { selectedId, onSelect };
 	const inner = useRef<HTMLDivElement>(null);
+	const grid = useRef<HTMLDivElement>(null);
 	const [drag, setDragState] = useState<DragState | null>(null);
 	const dragRef = useRef<DragState | null>(null);
 	const setDrag = useCallback((d: DragState | null) => {
@@ -333,6 +335,12 @@ export function DaysView({
 	const scroll =
 		scrollTop ??
 		Math.max(0, Math.min(1152 - gridHeight, nowY - gridHeight / 3));
+
+	// Opens scrolled to just before now (or where the caller asks); after that, the user scrolls.
+	const firstScroll = useRef(scroll);
+	useLayoutEffect(() => {
+		if (grid.current) grid.current.scrollTop = firstScroll.current;
+	}, []);
 
 	const columns = (render: (d: Temporal.PlainDate, i: number) => ReactNode) =>
 		days.map((d, i) => (
@@ -590,12 +598,8 @@ export function DaysView({
 				))}
 			</div>
 
-			<div className="sch-grid" style={{ top: gridTop }}>
-				<div
-					ref={inner}
-					className="sch-grid__inner"
-					style={{ transform: `translateY(${-scroll}px)` }}
-				>
+			<div className="sch-grid" ref={grid} style={{ top: gridTop }}>
+				<div ref={inner} className="sch-grid__inner">
 					<div className="sch-gutter" style={{ top: 0, height: 1152 }}>
 						{Array.from({ length: 23 }, (_, k) => {
 							const [h, mer] = hourParts(k + 1);
