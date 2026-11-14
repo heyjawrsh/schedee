@@ -1,3 +1,4 @@
+mod caldav;
 mod feed;
 mod google;
 
@@ -10,6 +11,9 @@ pub fn run() {
       google::google_refresh,
       google::google_forget,
       feed::fetch_feed,
+      caldav::caldav_save,
+      caldav::caldav_forget,
+      caldav::caldav_request,
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {
