@@ -5,11 +5,11 @@
 import ICAL from "ical.js";
 import { Temporal } from "temporal-polyfill";
 import { overrideId } from "./edit";
-import type { CalendarEvent, Recurrence } from "./model";
+import type { Attendee, CalendarEvent, Recurrence, Rsvp } from "./model";
 
 type Time = InstanceType<typeof ICAL.Time>;
 type Property = InstanceType<typeof ICAL.Property>;
-type Component = InstanceType<typeof ICAL.Component>;
+export type Component = InstanceType<typeof ICAL.Component>;
 
 export interface ParsedFeed {
 	/** X-WR-CALNAME, if the feed names itself. */
@@ -163,27 +163,26 @@ function colorOf(cal: Component): string | undefined {
 	return undefined;
 }
 
-/** Parses a feed. Events that can't be read are skipped rather than failing the whole feed. */
-export function parseIcs(
+/** One VEVENT and the event it became. */
+export interface IcsEntry {
+	component: Component;
+	event: CalendarEvent;
+}
+
+/**
+ * Reads a calendar into events, keeping each one's VEVENT next to it so a writer can update the
+ * original in place. Events that can't be read are skipped rather than failing the whole text.
+ */
+export function readIcs(
 	text: string,
 	calendarId: string,
-	/** Stands in for floating times and zones we can't name. */
 	fallbackZone: string,
-	/**
-	 * Names events after this key instead of their UID: a CalDAV resource holds one series, and
-	 * its key is how a later sync finds it again.
-	 */
 	key?: string,
-): ParsedFeed {
+): { calendar: Component; entries: IcsEntry[] } {
 	const cal = new ICAL.Component(ICAL.parse(text));
-	const name = cal.getFirstPropertyValue("x-wr-calname");
-	const refresh =
-		minutesOf(cal.getFirstPropertyValue("refresh-interval")) ??
-		minutesOf(cal.getFirstPropertyValue("x-published-ttl"));
-	const events: CalendarEvent[] = [];
+	const entries: IcsEntry[] = [];
 	const seen = new Map<string, number>();
 	const seriesZone = new Map<string, { zone: string; allDay: boolean }>();
-
 	const vevents = cal.getAllSubcomponents("vevent");
 	// Series first, so overrides can be written in their series' zone.
 	const ordered = [
@@ -197,18 +196,90 @@ export function parseIcs(
 			// Broken feeds reuse UIDs; keep every event.
 			const n = seen.get(e.id) ?? 0;
 			seen.set(e.id, n + 1);
-			events.push(n ? { ...e, id: `${e.id}~${n}` } : e);
+			entries.push({
+				component: v,
+				event: n ? { ...e, id: `${e.id}~${n}` } : e,
+			});
 		} catch {
-			// Skip the event, keep the feed.
+			// Skip the event, keep the rest.
 		}
 	}
+	return { calendar: cal, entries };
+}
+
+/** Parses a feed. Events that can't be read are skipped rather than failing the whole feed. */
+export function parseIcs(
+	text: string,
+	calendarId: string,
+	/** Stands in for floating times and zones we can't name. */
+	fallbackZone: string,
+	/**
+	 * Names events after this key instead of their UID: a CalDAV resource holds one series, and
+	 * its key is how a later sync finds it again.
+	 */
+	key?: string,
+): ParsedFeed {
+	const { calendar: cal, entries } = readIcs(
+		text,
+		calendarId,
+		fallbackZone,
+		key,
+	);
+	const name = cal.getFirstPropertyValue("x-wr-calname");
+	const refresh =
+		minutesOf(cal.getFirstPropertyValue("refresh-interval")) ??
+		minutesOf(cal.getFirstPropertyValue("x-published-ttl"));
 	const color = colorOf(cal);
 	return {
 		...(typeof name === "string" && name.trim() ? { name: name.trim() } : {}),
 		...(color ? { color } : {}),
 		...(refresh && refresh > 0 ? { refreshMinutes: refresh } : {}),
-		events,
+		events: entries.map((e) => e.event),
 	};
+}
+
+const RSVP: Record<string, Rsvp> = {
+	ACCEPTED: "accepted",
+	TENTATIVE: "tentative",
+	DECLINED: "declined",
+	"NEEDS-ACTION": "needsAction",
+};
+/**
+ * The email address an ORGANIZER or ATTENDEE line names. iCloud writes a principal URL as the
+ * value and puts the address in the EMAIL parameter.
+ */
+export const mailbox = (p: Property | null) => {
+	const v = p?.getFirstValue();
+	if (typeof v !== "string") return "";
+	const value = v.trim();
+	const email = /^mailto:/i.test(value)
+		? value.slice("mailto:".length)
+		: String(p?.getParameter("email") ?? "") || value;
+	return email.trim().toLowerCase();
+};
+
+/** Guests and organizer, so events someone else organizes stay read-only. */
+function attendeesOf(v: Component): Attendee[] {
+	const organizer = mailbox(v.getFirstProperty("organizer"));
+	const out: Attendee[] = [];
+	for (const p of v.getAllProperties("attendee")) {
+		const email = mailbox(p);
+		if (!email) continue;
+		const cn = p.getParameter("cn");
+		const stat = p.getParameter("partstat");
+		const a: Attendee = { email };
+		if (typeof cn === "string" && cn) a.name = cn;
+		const rsvp =
+			typeof stat === "string" ? RSVP[stat.toUpperCase()] : undefined;
+		if (rsvp) a.rsvp = rsvp;
+		if (email === organizer) a.organizer = true;
+		if (String(p.getParameter("cutype") ?? "").toUpperCase() === "ROOM")
+			a.resource = true;
+		out.push(a);
+	}
+	if (organizer && out.length && !out.some((a) => a.organizer))
+		out.unshift({ email: organizer, organizer: true });
+	return out;
 }
 
 function mapVevent(
@@ -307,5 +378,28 @@ function mapVevent(
 	if (location) out.location = location;
 	const description = text("description");
 	if (description) out.description = description;
+	const attendees = attendeesOf(v);
+	if (attendees.length) out.attendees = attendees;
+	const klass = String(v.getFirstPropertyValue("class") ?? "").toUpperCase();
+	if (klass === "PUBLIC") out.visibility = "public";
+	else if (klass === "PRIVATE" || klass === "CONFIDENTIAL")
+		out.visibility = "private";
+	const reminders = remindersOf(v);
+	if (reminders.length) out.reminders = reminders;
 	return out;
+}
+
+/** Minutes before start, for alarms set relative to the start. */
+export function remindersOf(v: Component): number[] {
+	const out = new Set<number>();
+	for (const a of v.getAllSubcomponents("valarm")) {
+		const trigger = a.getFirstProperty("trigger");
+		const value = trigger?.getFirstValue();
+		if (!(value instanceof ICAL.Duration)) continue;
+		if (String(trigger?.getParameter("related") ?? "").toUpperCase() === "END")
+			continue;
+		const minutes = -Math.round(value.toSeconds() / 60);
+		if (minutes >= 0) out.add(minutes);
+	}
+	return [...out].sort((a, b) => a - b);
 }

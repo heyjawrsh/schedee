@@ -30,6 +30,8 @@ export interface Credential {
 	server?: string;
 	/** CalDAV: where the account's calendars live, found once at sign-in. */
 	home?: string;
+	/** CalDAV: the user's own addresses, lowercase, to tell their events from invites. */
+	addresses?: string[];
 }
 
 /** Where incremental sync left off for one calendar. */
@@ -39,6 +41,8 @@ export interface SyncState {
 	syncToken?: string;
 	/** CalDAV: the calendar's change tag last time; unchanged means nothing to fetch. */
 	ctag?: string;
+	/** CalDAV: the calendar's address, where new events go. */
+	href?: string;
 	syncedAt?: number;
 }
 
@@ -49,6 +53,35 @@ export type QueuedWrite = GoogleWrite & {
 	tries?: number;
 	error?: string;
 };
+
+/**
+ * The server's copy of one CalDAV resource (a series with its overrides, or a single event): kept
+ * so a write can change only what we model and say which version it replaces.
+ */
+export interface DavObject {
+	/** `${calendarId}#${key}`, the same as its series' event id. */
+	id: string;
+	calendarId: string;
+	href: string;
+	etag?: string;
+	ics: string;
+}
+
+/** A CalDAV resource with local changes to send. What to send is read when it goes. */
+export interface DavWrite {
+	/** The resource, as in DavObject. */
+	id: string;
+	accountId: string;
+	calendarId: string;
+	/** Goes up with every local edit, so a send can tell if it went out of date. */
+	rev: number;
+	tries?: number;
+	error?: string;
+}
+
+/** The CalDAV resource an event belongs to. */
+export const resourceOf = (e: Pick<CalendarEvent, "id" | "recurringEventId">) =>
+	e.recurringEventId ?? e.id;
 
 /** An ICS feed subscription: one calendar in the "Subscriptions" group. */
 export interface Feed {
@@ -73,6 +106,8 @@ export class SchedeeDB extends Dexie {
 	syncState!: EntityTable<SyncState, "calendarId">;
 	outbox!: EntityTable<QueuedWrite, "seq">;
 	feeds!: EntityTable<Feed, "calendarId">;
+	davObjects!: EntityTable<DavObject, "id">;
+	davOutbox!: EntityTable<DavWrite, "id">;
 
 	constructor(name = "schedee") {
 		super(name);
@@ -89,6 +124,21 @@ export class SchedeeDB extends Dexie {
 			.stores({ outbox: "++seq, accountId, *localIds" })
 			.upgrade((tx) => tx.table("syncState").clear());
 		this.version(4).stores({ feeds: "calendarId" });
+		// v5: CalDAV events are keyed by resource name without ".ics", so those calendars start over.
+		this.version(5)
+			.stores({ davObjects: "id, calendarId", davOutbox: "id, accountId" })
+			.upgrade(async (tx) => {
+				await tx
+					.table("syncState")
+					.where("accountId")
+					.startsWith("caldav:")
+					.delete();
+				await tx
+					.table("events")
+					.where("calendarId")
+					.startsWith("caldav:")
+					.delete();
+			});
 	}
 }
 
@@ -163,6 +213,20 @@ export interface LocalStore {
 	 * this device goes back to what the provider has.
 	 */
 	dropWrite(seq: number, error: string): Promise<void>;
+	/** One CalDAV account's resources waiting to be sent. */
+	pendingDavWrites(accountId: string): Promise<DavWrite[]>;
+	davObject(id: string): Promise<DavObject | undefined>;
+	/**
+	 * A CalDAV write went through: the server now has `object` (or nothing, after a delete).
+	 * Keeps the resource queued if it changed here again meanwhile; that change goes next.
+	 */
+	finishDavWrite(w: DavWrite, object: DavObject | null): Promise<void>;
+	retryDavWrite(id: string, error: string): Promise<void>;
+	/**
+	 * The server refused a CalDAV write for good, or the resource changed there first. It's
+	 * dropped and its calendar reloads from the server.
+	 */
+	dropDavWrite(id: string, error: string): Promise<void>;
 	/**
 	 * Applies one calendar's sync results. With `reset`, the calendar's events are replaced
 	 * (a full resync after the server dropped our sync token). Events with writes still queued
@@ -170,7 +234,12 @@ export interface LocalStore {
 	 */
 	applySync(
 		state: SyncState,
-		changes: { put: CalendarEvent[]; remove: string[] },
+		changes: {
+			put: CalendarEvent[];
+			remove: string[];
+			/** CalDAV: the server's copies of the resources that came in. */
+			objects?: DavObject[];
+		},
 		reset?: boolean,
 	): Promise<void>;
 }
@@ -196,12 +265,21 @@ export function createLocalStore(
 ): LocalStore {
 	const pendingIds = async () =>
 		new Set((await db.outbox.toArray()).flatMap((w) => w.localIds));
+	const pendingResources = async () =>
+		new Set((await db.davOutbox.toArray()).map((w) => w.id));
+	/** Which account each CalDAV calendar belongs to. */
+	const davAccounts = (accounts: Account[]) =>
+		new Map(
+			accounts
+				.filter((a) => a.provider === "caldav")
+				.flatMap((a) => a.calendars.map((c) => [c.id, a.id] as const)),
+		);
 	const saving = new Set<Promise<number>>();
 	/** One commit: the edit plus the writes that carry it to synced calendars, in one transaction. */
 	async function save(r: EditResult): Promise<number> {
 		return db.transaction(
 			"rw",
-			[db.events, db.accounts, db.outbox],
+			[db.events, db.accounts, db.outbox, db.davOutbox],
 			async () => {
 				// The touched events, plus the series of any override among them.
 				const ids = new Set([...r.remove, ...r.put.map((e) => e.id)]);
@@ -215,7 +293,8 @@ export function createLocalStore(
 				);
 				const before = new Map(known.map((e) => [e.id, e]));
 				const after = new Map(applyResult(known, r).map((e) => [e.id, e]));
-				const targets = googleTargets(await db.accounts.toArray());
+				const accounts = await db.accounts.toArray();
+				const targets = googleTargets(accounts);
 				const writes = planGoogleWrites(
 					r,
 					before,
@@ -223,10 +302,26 @@ export function createLocalStore(
 					(id) => targets.get(id),
 					zone,
 				);
+				// CalDAV sends whole resources: mark each one this edit touched.
+				const dav = davAccounts(accounts);
+				const resources = new Map<string, DavWrite>();
+				for (const e of [...touched, ...r.put]) {
+					const accountId = dav.get(e.calendarId);
+					const id = resourceOf(e);
+					const queued = await db.davOutbox.get(id);
+					if (accountId)
+						resources.set(id, {
+							id,
+							accountId,
+							calendarId: e.calendarId,
+							rev: (queued?.rev ?? 0) + 1,
+						});
+				}
 				if (r.remove.length) await db.events.bulkDelete(r.remove);
 				if (r.put.length) await db.events.bulkPut(r.put);
 				if (writes.length) await db.outbox.bulkAdd(writes);
-				return writes.length;
+				if (resources.size) await db.davOutbox.bulkPut([...resources.values()]);
+				return writes.length + resources.size;
 			},
 		);
 	}
@@ -293,6 +388,50 @@ export function createLocalStore(
 					const state = await db.syncState.get(calendarId);
 					if (state) {
 						const { syncToken: _t, ...rest } = state;
+						await db.syncState.put(rest);
+					}
+					await db.accounts
+						.where("id")
+						.equals(w.accountId)
+						.modify((a) => {
+							a.dropped = (a.dropped ?? 0) + 1;
+						});
+				},
+			);
+		},
+		pendingDavWrites: (accountId) =>
+			db.davOutbox.where("accountId").equals(accountId).toArray(),
+		davObject: (id) => db.davObjects.get(id),
+		async finishDavWrite(w, object) {
+			await db.transaction("rw", [db.davOutbox, db.davObjects], async () => {
+				const now = await db.davOutbox.get(w.id);
+				if (object) await db.davObjects.put(object);
+				else await db.davObjects.delete(w.id);
+				// Changed again while sending: keep it queued for the next round.
+				if (now?.rev === w.rev) await db.davOutbox.delete(w.id);
+			});
+		},
+		async retryDavWrite(id, error) {
+			await db.davOutbox
+				.where("id")
+				.equals(id)
+				.modify((w) => {
+					w.tries = (w.tries ?? 0) + 1;
+					w.error = error;
+				});
+		},
+		async dropDavWrite(id, error) {
+			await db.transaction(
+				"rw",
+				[db.davOutbox, db.syncState, db.accounts],
+				async () => {
+					const w = await db.davOutbox.get(id);
+					if (!w) return;
+					console.warn(`Dropped a CalDAV write: ${error}`);
+					await db.davOutbox.delete(id);
+					const state = await db.syncState.get(w.calendarId);
+					if (state) {
+						const { syncToken: _t, ctag: _c, ...rest } = state;
 						await db.syncState.put(rest);
 					}
 					await db.accounts
@@ -379,13 +518,24 @@ export function createLocalStore(
 		async removeAccount(id) {
 			await db.transaction(
 				"rw",
-				[db.accounts, db.events, db.credentials, db.syncState, db.outbox],
+				[
+					db.accounts,
+					db.events,
+					db.credentials,
+					db.syncState,
+					db.outbox,
+					db.davOutbox,
+					db.davObjects,
+				],
 				async () => {
 					const account = await db.accounts.get(id);
 					await db.outbox.where("accountId").equals(id).delete();
+					await db.davOutbox.where("accountId").equals(id).delete();
 					const ids = account?.calendars.map((c) => c.id) ?? [];
-					if (ids.length)
+					if (ids.length) {
 						await db.events.where("calendarId").anyOf(ids).delete();
+						await db.davObjects.where("calendarId").anyOf(ids).delete();
+					}
 					await db.syncState.where("accountId").equals(id).delete();
 					await db.credentials.delete(id);
 					await db.accounts.delete(id);
@@ -465,19 +615,44 @@ export function createLocalStore(
 		async applySync(state, changes, reset = false) {
 			await db.transaction(
 				"rw",
-				[db.events, db.syncState, db.outbox, db.accounts],
+				[
+					db.events,
+					db.syncState,
+					db.outbox,
+					db.accounts,
+					db.davOutbox,
+					db.davObjects,
+				],
 				async () => {
 					if (!(await db.accounts.get(state.accountId))) return;
-					// Our own queued edits win until they're sent; the next sync brings Google's copy.
+					// Our own queued edits win until they're sent; the next sync brings the provider's copy.
 					const pending = await pendingIds();
-					const put = changes.put.filter((e) => !pending.has(e.id));
-					const remove = changes.remove.filter((id) => !pending.has(id));
-					if (reset)
+					const resources = await pendingResources();
+					const mine = (e: CalendarEvent) =>
+						pending.has(e.id) || resources.has(resourceOf(e));
+					const put = changes.put.filter((e) => !mine(e));
+					const remove = changes.remove.filter(
+						(id) => !pending.has(id) && !resources.has(id),
+					);
+					if (reset) {
 						await db.events
 							.where("calendarId")
 							.equals(state.calendarId)
-							.filter((e) => !pending.has(e.id))
+							.filter((e) => !mine(e))
 							.delete();
+						if (changes.objects)
+							await db.davObjects
+								.where("calendarId")
+								.equals(state.calendarId)
+								.filter((o) => !resources.has(o.id))
+								.delete();
+					}
+					if (changes.objects) {
+						await db.davObjects.bulkDelete(remove);
+						await db.davObjects.bulkPut(
+							changes.objects.filter((o) => !resources.has(o.id)),
+						);
+					}
 					if (remove.length) {
 						await db.events.where("recurringEventId").anyOf(remove).delete();
 						await db.events.bulkDelete(remove);
