@@ -4,7 +4,12 @@ import { describe, expect, it } from "vitest";
 import { demoSeed } from "../../demo";
 import { createLocalStore, SchedeeDB } from "../../store/db";
 import { DavError, type DavRequest } from "./dav";
-import { discover, ICLOUD_SERVER, listCalendars, syncCalDavAccount } from "./sync";
+import {
+	discover,
+	ICLOUD_SERVER,
+	listCalendars,
+	syncCalDavAccount,
+} from "./sync";
 
 const ACCOUNT = "caldav:ada@example.com@caldav.icloud.com";
 const USER = "https://p42-caldav.icloud.com/123";
@@ -35,7 +40,10 @@ const gone = (href: string) =>
 /** A small iCloud-shaped server. Resources live in `objects`; every change bumps the token. */
 function fakeServer() {
 	const objects = new Map<string, string>([
-		["/123/calendars/work/A1.ics", ics("a@x", "Standup", ["RRULE:FREQ=DAILY;COUNT=3"])],
+		[
+			"/123/calendars/work/A1.ics",
+			ics("a@x", "Standup", ["RRULE:FREQ=DAILY;COUNT=3"]),
+		],
 		["/123/calendars/work/B2.ics", ics("b@x", "Review")],
 	]);
 	let version = 1;
@@ -53,15 +61,34 @@ function fakeServer() {
 			if (given() !== password) return res(401);
 			if (method === "PROPFIND" && body.includes("current-user-principal"))
 				return u.host === "caldav.icloud.com"
-					? res(207, ms(ok("/", `<d:current-user-principal><d:href>${USER}/principal/</d:href></d:current-user-principal>`)))
+					? res(
+							207,
+							ms(
+								ok(
+									"/",
+									`<d:current-user-principal><d:href>${USER}/principal/</d:href></d:current-user-principal>`,
+								),
+							),
+						)
 					: res(404);
 			if (method === "PROPFIND" && body.includes("calendar-home-set"))
-				return res(207, ms(ok(`${USER}/principal/`, `<c:calendar-home-set><d:href>${HOME}</d:href></c:calendar-home-set>`)));
+				return res(
+					207,
+					ms(
+						ok(
+							`${USER}/principal/`,
+							`<c:calendar-home-set><d:href>${HOME}</d:href></c:calendar-home-set>`,
+						),
+					),
+				);
 			if (method === "PROPFIND" && u.pathname === "/123/calendars/")
 				return res(
 					207,
 					ms(
-						ok("/123/calendars/", "<d:resourcetype><d:collection/></d:resourcetype>") +
+						ok(
+							"/123/calendars/",
+							"<d:resourcetype><d:collection/></d:resourcetype>",
+						) +
 							ok(
 								"/123/calendars/work/",
 								`<d:resourcetype><d:collection/><c:calendar/></d:resourcetype><d:displayname>Work</d:displayname><x:calendar-color>#FF2968FF</x:calendar-color><c:supported-calendar-component-set><c:comp name="VEVENT"/></c:supported-calendar-component-set><cs:getctag>v${version}</cs:getctag><d:sync-token>t${version}</d:sync-token>`,
@@ -75,17 +102,37 @@ function fakeServer() {
 			if (method === "REPORT" && body.includes("sync-collection")) {
 				if (!syncCollection) return res(403);
 				const since = Number(/<d:sync-token>t?(\d*)</.exec(body)?.[1] || 0);
-				const changed = [...changedAt].filter(([, at]) => at > since).map(([p]) => ok(p, '<d:getetag>"e"</d:getetag>'));
-				const dropped = removed.filter((r) => r.at > since).map((r) => gone(r.path));
+				const changed = [...changedAt]
+					.filter(([, at]) => at > since)
+					.map(([p]) => ok(p, '<d:getetag>"e"</d:getetag>'));
+				const dropped = removed
+					.filter((r) => r.at > since)
+					.map((r) => gone(r.path));
 				return res(207, ms(changed.join("") + dropped.join(""), `t${version}`));
 			}
 			if (method === "REPORT" && body.includes("calendar-query"))
-				return res(207, ms([...objects.keys()].map((p) => ok(p, '<d:getetag>"e"</d:getetag>')).join("")));
-			if (method === "REPORT" && body.includes("calendar-multiget")) {
-				const hrefs = [...body.matchAll(/<d:href>([^<]+)<\/d:href>/g)].map((m) => m[1] ?? "");
 				return res(
 					207,
-					ms(hrefs.filter((h) => objects.has(h)).map((h) => ok(h, `<c:calendar-data>${objects.get(h)}</c:calendar-data>`)).join("")),
+					ms(
+						[...objects.keys()]
+							.map((p) => ok(p, '<d:getetag>"e"</d:getetag>'))
+							.join(""),
+					),
+				);
+			if (method === "REPORT" && body.includes("calendar-multiget")) {
+				const hrefs = [...body.matchAll(/<d:href>([^<]+)<\/d:href>/g)].map(
+					(m) => m[1] ?? "",
+				);
+				return res(
+					207,
+					ms(
+						hrefs
+							.filter((h) => objects.has(h))
+							.map((h) =>
+								ok(h, `<c:calendar-data>${objects.get(h)}</c:calendar-data>`),
+							)
+							.join(""),
+					),
 				);
 			}
 			return res(400);
@@ -121,11 +168,26 @@ async function setup() {
 	await store.ready;
 	const home = await discover(dav, ICLOUD_SERVER);
 	await store.putCredential({ accountId: ACCOUNT, keychain: true, home });
-	await store.upsertAccount({ id: ACCOUNT, label: "ada@example.com", provider: "caldav", calendars: [] });
+	await store.upsertAccount({
+		id: ACCOUNT,
+		label: "ada@example.com",
+		provider: "caldav",
+		calendars: [],
+	});
 	const sync = () =>
-		syncCalDavAccount(store, { id: ACCOUNT, label: "ada@example.com" }, dav, "America/Chicago");
+		syncCalDavAccount(
+			store,
+			{ id: ACCOUNT, label: "ada@example.com" },
+			dav,
+			"America/Chicago",
+		);
 	const titles = async () =>
-		(await store.db.events.where("calendarId").equals(`${ACCOUNT}/work`).toArray())
+		(
+			await store.db.events
+				.where("calendarId")
+				.equals(`${ACCOUNT}/work`)
+				.toArray()
+		)
 			.map((e) => e.title)
 			.sort();
 	return { server, dav, store, sync, titles, home };
@@ -139,13 +201,24 @@ describe("CalDAV", () => {
 
 	it("turns down a wrong password", async () => {
 		const server = fakeServer();
-		await expect(discover(server.dav(() => "wrong"), ICLOUD_SERVER)).rejects.toEqual(new DavError(401));
+		await expect(
+			discover(
+				server.dav(() => "wrong"),
+				ICLOUD_SERVER,
+			),
+		).rejects.toEqual(new DavError(401));
 	});
 
 	it("lists only calendars that hold events, with their names and colors", async () => {
 		const { dav } = await setup();
 		expect(await listCalendars(dav, HOME)).toEqual([
-			{ href: WORK, name: "Work", color: "#FF2968", ctag: "v1", syncToken: "t1" },
+			{
+				href: WORK,
+				name: "Work",
+				color: "#FF2968",
+				ctag: "v1",
+				syncToken: "t1",
+			},
 		]);
 	});
 
@@ -157,9 +230,9 @@ describe("CalDAV", () => {
 		expect(account?.calendars).toEqual([
 			{ id: `${ACCOUNT}/work`, name: "Work", color: "#FF2968", readOnly: true },
 		]);
-		expect((await store.db.events.get(`${ACCOUNT}/work#A1.ics`))?.recurrence?.rrule).toBe(
-			"FREQ=DAILY;COUNT=3",
-		);
+		expect(
+			(await store.db.events.get(`${ACCOUNT}/work#A1.ics`))?.recurrence?.rrule,
+		).toBe("FREQ=DAILY;COUNT=3");
 	});
 
 	it("pulls only what changed, and skips a calendar whose tag hasn't moved", async () => {
@@ -184,7 +257,10 @@ describe("CalDAV", () => {
 		server.set(
 			"/123/calendars/work/A1.ics",
 			[
-				ics("a@x", "Standup", ["RRULE:FREQ=DAILY;COUNT=3"]).replace("END:VCALENDAR", ""),
+				ics("a@x", "Standup", ["RRULE:FREQ=DAILY;COUNT=3"]).replace(
+					"END:VCALENDAR",
+					"",
+				),
 				"BEGIN:VEVENT",
 				"UID:a@x",
 				"SUMMARY:Standup (late)",
@@ -196,10 +272,23 @@ describe("CalDAV", () => {
 			].join("\r\n"),
 		);
 		await sync();
-		expect(await store.db.events.where("recurringEventId").equals(`${ACCOUNT}/work#A1.ics`).count()).toBe(1);
-		server.set("/123/calendars/work/A1.ics", ics("a@x", "Standup", ["RRULE:FREQ=DAILY;COUNT=3"]));
+		expect(
+			await store.db.events
+				.where("recurringEventId")
+				.equals(`${ACCOUNT}/work#A1.ics`)
+				.count(),
+		).toBe(1);
+		server.set(
+			"/123/calendars/work/A1.ics",
+			ics("a@x", "Standup", ["RRULE:FREQ=DAILY;COUNT=3"]),
+		);
 		await sync();
-		expect(await store.db.events.where("recurringEventId").equals(`${ACCOUNT}/work#A1.ics`).count()).toBe(0);
+		expect(
+			await store.db.events
+				.where("recurringEventId")
+				.equals(`${ACCOUNT}/work#A1.ics`)
+				.count(),
+		).toBe(0);
 	});
 
 	it("falls back to a full listing on servers without sync-collection", async () => {
