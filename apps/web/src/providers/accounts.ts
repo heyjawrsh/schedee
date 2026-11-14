@@ -2,6 +2,7 @@ import type { Account } from "@schedee/core";
 import { demoSeed } from "../demo";
 import type { LocalStore } from "../store/db";
 import { DavError, type DavRequest } from "./caldav/dav";
+import { flushCalDavAccount } from "./caldav/outbox";
 import { discover, syncCalDavAccount } from "./caldav/sync";
 import { refreshFeeds } from "./feeds";
 import { GoogleAuthError, signInWithGoogle } from "./google/auth";
@@ -91,8 +92,8 @@ export interface CalDavLogin {
 /** Requests for one CalDAV account, sent from Rust with its keychain login. */
 const davFor =
 	(accountId: string): DavRequest =>
-	(method, url, depth, body) =>
-		desktopDav(accountId, method, url, depth, body);
+	(method, url, options) =>
+		desktopDav(accountId, method, url, options);
 
 /**
  * Adds an iCloud or other CalDAV account (desktop only). The login goes to the keychain and is
@@ -225,7 +226,10 @@ async function syncOnce(store: LocalStore): Promise<void> {
 			.filter((a) => a.provider === "caldav" && isDesktop())
 			.map(async (a) => {
 				try {
-					await syncCalDavAccount(store, a, davFor(a.id), zone());
+					const dav = davFor(a.id);
+					const sent = await flushCalDavAccount(store, a.id, dav, zone());
+					if (sent.stopped === "offline") return;
+					await syncCalDavAccount(store, a, dav, zone());
 					if (a.problem) await store.setAccountProblem(a.id, undefined);
 				} catch (e: unknown) {
 					const problem = calDavProblem(e);
