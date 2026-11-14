@@ -138,11 +138,11 @@ export async function subscribeFeed(
 		await refreshFeed(store, known);
 		return known.calendarId;
 	}
-	const calendarId = `ics:${randomHex(8)}`;
 	await dropDemo(store);
-	await store.addFeed(
+	// Checked again as it's stored, in case the same link was submitted twice at once.
+	const calendarId = await store.addFeed(
 		{
-			id: calendarId,
+			id: `ics:${randomHex(8)}`,
 			name: nameFromUrl(url),
 			color: DEFAULT_COLOR,
 			subscribed: true,

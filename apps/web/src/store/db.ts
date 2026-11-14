@@ -120,8 +120,11 @@ export interface LocalStore {
 	reseed(): Promise<void>;
 	/** Every feed subscription. */
 	feeds(): Promise<Feed[]>;
-	/** Adds a feed's calendar to the "Subscriptions" group, creating the group if needed. */
-	addFeed(calendar: Calendar, url: string): Promise<void>;
+	/**
+	 * Adds a feed's calendar to the "Subscriptions" group, creating the group if needed. A link
+	 * that's already stored isn't added again; returns the calendar id that holds the link.
+	 */
+	addFeed(calendar: Calendar, url: string): Promise<string>;
 	/**
 	 * Records a fetch: new validators and timing, the calendar's name, color and problem, and,
 	 * with `events`, the feed's full contents in place of the old ones. Does nothing if the feed
@@ -384,8 +387,10 @@ export function createLocalStore(
 			);
 		},
 		feeds: () => db.feeds.toArray(),
-		async addFeed(calendar, url) {
-			await db.transaction("rw", [db.accounts, db.feeds], async () => {
+		addFeed(calendar, url) {
+			return db.transaction("rw", [db.accounts, db.feeds], async () => {
+				const known = (await db.feeds.toArray()).find((f) => f.url === url);
+				if (known) return known.calendarId;
 				const group = await db.accounts.get(FEEDS_ACCOUNT);
 				const order =
 					group?.order ??
@@ -398,6 +403,7 @@ export function createLocalStore(
 					order,
 				});
 				await db.feeds.put({ calendarId: calendar.id, url });
+				return calendar.id;
 			});
 		},
 		async applyFeed(calendarId, { feed, calendar, problem, events }) {

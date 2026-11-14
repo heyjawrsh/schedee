@@ -74,6 +74,19 @@ describe("feeds", () => {
 		expect((await s.db.accounts.get(FEEDS_ACCOUNT))?.calendars).toHaveLength(1);
 	});
 
+	it("doesn't add a link twice when it's submitted twice at once", async () => {
+		const s = store();
+		await s.ready;
+		answer({ status: 200, body: ics("Shift") });
+		const [a, b] = await Promise.all([
+			subscribeFeed(s, "https://example.com/rota.ics"),
+			subscribeFeed(s, "https://example.com/rota.ics"),
+		]);
+		expect(b).toBe(a);
+		expect(await s.feeds()).toHaveLength(1);
+		expect((await s.db.accounts.get(FEEDS_ACCOUNT))?.calendars).toHaveLength(1);
+	});
+
 	it("keeps what it has when the feed fails, and says so until it loads again", async () => {
 		const s = store();
 		await s.ready;
