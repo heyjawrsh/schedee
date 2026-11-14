@@ -244,14 +244,18 @@ const RSVP: Record<string, Rsvp> = {
 	DECLINED: "declined",
 	"NEEDS-ACTION": "needsAction",
 };
+/**
+ * The email address an ORGANIZER or ATTENDEE line names. iCloud writes a principal URL as the
+ * value and puts the address in the EMAIL parameter.
+ */
 export const mailbox = (p: Property | null) => {
 	const v = p?.getFirstValue();
-	return typeof v === "string"
-		? v
-				.replace(/^mailto:/i, "")
-				.trim()
-				.toLowerCase()
-		: "";
+	if (typeof v !== "string") return "";
+	const value = v.trim();
+	const email = /^mailto:/i.test(value)
+		? value.slice("mailto:".length)
+		: String(p?.getParameter("email") ?? "") || value;
+	return email.trim().toLowerCase();
 };
 
 /** Guests and organizer, so events someone else organizes stay read-only. */

@@ -58,14 +58,22 @@ async function principalAt(dav: DavRequest, url: string) {
 	}
 }
 
+export interface Discovery {
+	/** Where the account's calendars live. */
+	home: string;
+	/** The user's own email addresses (iCloud: the Apple ID and its aliases), lowercase. */
+	addresses: string[];
+}
+
 /**
- * Finds where an account's calendars live. Tries the server address, then the well-known
- * CalDAV address on that host. Throws DavError(401) for a wrong login.
+ * Finds where an account's calendars live and which addresses are the user's. Tries the server
+ * address, then the well-known CalDAV address on that host. Throws DavError(401) for a wrong
+ * login.
  */
 export async function discover(
 	dav: DavRequest,
 	server: string,
-): Promise<string> {
+): Promise<Discovery> {
 	const principal =
 		(await principalAt(dav, server)) ??
 		(await principalAt(dav, new URL("/.well-known/caldav", server).toString()));
@@ -75,13 +83,20 @@ export async function discover(
 		"PROPFIND",
 		principal,
 		"0",
-		propfindBody("<c:calendar-home-set/>"),
+		propfindBody("<c:calendar-home-set/><c:calendar-user-address-set/>"),
 	);
 	const item = items[0];
 	const home =
 		item && hrefIn(prop(item, NS.cal, "calendar-home-set"), principal);
 	if (!home) throw new DavError(404);
-	return home;
+	const set = item && prop(item, NS.cal, "calendar-user-address-set");
+	const addresses = set
+		? Array.from(set.getElementsByTagNameNS(NS.dav, "href"))
+				.map((h) => h.textContent?.trim() ?? "")
+				.filter((h) => /^mailto:/i.test(h))
+				.map((h) => h.slice("mailto:".length).toLowerCase())
+		: [];
+	return { home, addresses };
 }
 
 export interface RemoteCalendar {
@@ -244,8 +259,8 @@ export async function syncCalendar(
 	accountId: string,
 	remote: RemoteCalendar,
 	zone: string,
-	/** The signed-in user's address, to mark them among guests. */
-	self?: string,
+	/** The signed-in user's addresses, to mark them among guests. */
+	self: string[] = [],
 ): Promise<number> {
 	const calendarId = calendarIdFor(accountId, remote.href);
 	const prior = await store.getSyncState(calendarId);
@@ -264,17 +279,17 @@ export async function syncCalendar(
 
 	const put: CalendarEvent[] = [];
 	const objects: DavObject[] = [];
-	const me = self?.toLowerCase();
+	const me = new Set(self.map((a) => a.toLowerCase()));
 	for (const o of await fetchObjects(dav, remote.href, changes.changed)) {
 		const key = keyOf(o.href);
 		try {
 			for (const e of parseIcs(o.data, calendarId, zone, key).events)
 				put.push(
-					me && e.attendees
+					e.attendees
 						? {
 								...e,
 								attendees: e.attendees.map((a) =>
-									a.email === me ? { ...a, self: true } : a,
+									me.has(a.email) ? { ...a, self: true } : a,
 								),
 							}
 						: e,
@@ -320,17 +335,26 @@ export async function syncCalDavAccount(
 	if (!cred) return { calendars: 0, changed: 0 };
 	let home = cred.home;
 	if (!home) throw new DavError(401);
+	const server = cred.server ?? new URL("/", home).toString();
+	let addresses = cred.addresses;
+	if (!addresses) {
+		// Signed in before we kept the user's addresses: look them up, and read every event again
+		// so the user is found among its guests.
+		({ home, addresses } = await discover(dav, server));
+		await store.updateCredential({ ...cred, home, addresses });
+		await store.db.syncState.where("accountId").equals(account.id).delete();
+	}
 	let remote: RemoteCalendar[];
 	try {
 		remote = await listCalendars(dav, home);
 	} catch (e) {
 		// The home moved: look it up again once.
 		if (!(e instanceof DavError) || e.status !== 404) throw e;
-		const server = new URL("/", home).toString();
-		home = await discover(dav, server);
-		await store.updateCredential({ ...cred, home });
+		({ home, addresses } = await discover(dav, server));
+		await store.updateCredential({ ...cred, home, addresses });
 		remote = await listCalendars(dav, home);
 	}
+	const self = [...new Set([...addresses, account.label.toLowerCase()])];
 	// The account may have been removed while the list was loading; don't bring it back.
 	const kept = await store.upsertAccount(
 		{
@@ -344,13 +368,6 @@ export async function syncCalDavAccount(
 	if (!kept) return { calendars: 0, changed: 0 };
 	let changed = 0;
 	for (const c of remote)
-		changed += await syncCalendar(
-			store,
-			dav,
-			account.id,
-			c,
-			zone,
-			account.label,
-		);
+		changed += await syncCalendar(store, dav, account.id, c, zone, self);
 	return { calendars: remote.length, changed };
 }

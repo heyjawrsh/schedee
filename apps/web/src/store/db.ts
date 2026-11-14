@@ -30,6 +30,8 @@ export interface Credential {
 	server?: string;
 	/** CalDAV: where the account's calendars live, found once at sign-in. */
 	home?: string;
+	/** CalDAV: the user's own addresses, lowercase, to tell their events from invites. */
+	addresses?: string[];
 }
 
 /** Where incremental sync left off for one calendar. */

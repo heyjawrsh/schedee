@@ -109,9 +109,9 @@ export async function addCalDavAccount(
 	const id = `caldav:${username}@${host}`;
 	const existing = await store.db.accounts.get(id);
 	await desktopCalDavSave(id, { ...login, username });
-	let home: string;
+	let found: Awaited<ReturnType<typeof discover>>;
 	try {
-		home = await discover(davFor(id), login.server);
+		found = await discover(davFor(id), login.server);
 	} catch (e) {
 		if (!existing)
 			await desktopCalDavForget(id).catch(() => {
@@ -124,7 +124,7 @@ export async function addCalDavAccount(
 		accountId: id,
 		keychain: true,
 		server: login.server,
-		home,
+		...found,
 	});
 	await dropDemo(store);
 	if (existing) await store.setAccountProblem(id, undefined);

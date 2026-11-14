@@ -115,7 +115,7 @@ function fakeServer() {
 					ms(
 						ok(
 							`${USER}/principal/`,
-							`<c:calendar-home-set><d:href>${HOME}</d:href></c:calendar-home-set>`,
+							`<c:calendar-home-set><d:href>${HOME}</d:href></c:calendar-home-set><c:calendar-user-address-set><d:href>${USER}/principal/</d:href><d:href>mailto:Ada@Example.com</d:href><d:href>mailto:ada@oldjob.example</d:href></c:calendar-user-address-set>`,
 						),
 					),
 				);
@@ -207,8 +207,14 @@ async function setup() {
 		ZONE,
 	);
 	await store.ready;
-	const home = await discover(dav, ICLOUD_SERVER);
-	await store.putCredential({ accountId: ACCOUNT, keychain: true, home });
+	const { home, addresses } = await discover(dav, ICLOUD_SERVER);
+	await store.putCredential({
+		accountId: ACCOUNT,
+		keychain: true,
+		server: ICLOUD_SERVER,
+		home,
+		addresses,
+	});
 	await store.upsertAccount({
 		id: ACCOUNT,
 		label: "ada@example.com",
@@ -237,8 +243,12 @@ async function setup() {
 
 describe("CalDAV sync", () => {
 	it("finds the calendar home through the principal, across iCloud hosts", async () => {
-		const { home } = await setup();
+		const { home, store } = await setup();
 		expect(home).toBe(HOME);
+		expect((await store.getCredential(ACCOUNT))?.addresses).toEqual([
+			"ada@example.com",
+			"ada@oldjob.example",
+		]);
 	});
 
 	it("turns down a wrong password", async () => {
@@ -357,6 +367,38 @@ describe("CalDAV sync", () => {
 			{ email: "grace@example.com", rsvp: "accepted", organizer: true },
 			{ email: "ada@example.com", rsvp: "needsAction", self: true },
 		]);
+	});
+
+	it("knows the user's own events when iCloud names them by principal and an alias", async () => {
+		const { server, store, sync, event } = await setup();
+		const me = "/123/principal/";
+		server.set(
+			"/123/calendars/work/O1.ics",
+			ics("o@x", "Coffee", [
+				`ORGANIZER;CN=Ada;EMAIL=ada@oldjob.example:${me}`,
+				`ATTENDEE;CN=Ada;EMAIL=ada@oldjob.example;PARTSTAT=ACCEPTED;ROLE=CHAIR:${me}`,
+				"ATTENDEE;EMAIL=lin@example.com;PARTSTAT=ACCEPTED:/456/principal/",
+			]),
+		);
+		await sync();
+		// An account added before addresses were kept: they're looked up, and events read again.
+		const cred = await store.getCredential(ACCOUNT);
+		if (!cred) throw new Error("no credential");
+		const { addresses: _, ...old } = cred;
+		await store.putCredential(old);
+		await store.db.events.update(`${CAL}#O1`, { attendees: [] });
+		await sync();
+		expect((await event(`${CAL}#O1`)).attendees).toEqual([
+			{
+				email: "ada@oldjob.example",
+				name: "Ada",
+				rsvp: "accepted",
+				organizer: true,
+				self: true,
+			},
+			{ email: "lin@example.com", rsvp: "accepted" },
+		]);
+		expect((await store.getCredential(ACCOUNT))?.addresses).toHaveLength(2);
 	});
 });
 
