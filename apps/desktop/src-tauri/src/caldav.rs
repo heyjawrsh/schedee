@@ -10,8 +10,8 @@ const KEYCHAIN_SERVICE: &str = "ee.sched.app.caldav";
 const TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_BYTES: usize = 20 * 1024 * 1024;
 const MAX_REDIRECTS: usize = 5;
-/// Read-only for now: discovery and sync.
-const METHODS: [&str; 3] = ["PROPFIND", "REPORT", "GET"];
+/// Discovery, sync, and writing single resources.
+const METHODS: [&str; 5] = ["PROPFIND", "REPORT", "GET", "PUT", "DELETE"];
 
 #[derive(Serialize, Deserialize)]
 struct Login {
@@ -27,6 +27,23 @@ pub struct DavResponse {
   body: String,
   /// Where the request ended up after redirects, for resolving relative hrefs.
   url: String,
+  /// The resource's new version after a write, when the server says.
+  #[serde(skip_serializing_if = "Option::is_none")]
+  etag: Option<String>,
+}
+
+/// Extra request details for writes.
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct Options {
+  depth: Option<String>,
+  body: Option<String>,
+  /// Defaults to XML; iCalendar for PUT.
+  content_type: Option<String>,
+  /// Only write over this version.
+  if_match: Option<String>,
+  /// Only create: fail if the resource exists.
+  if_none_match: Option<bool>,
 }
 
 fn keychain(account_id: &str) -> Result<keyring::Entry, String> {
@@ -89,9 +106,9 @@ pub async fn caldav_request(
   account_id: String,
   method: String,
   url: String,
-  depth: Option<String>,
-  body: Option<String>,
+  options: Option<Options>,
 ) -> Result<DavResponse, String> {
+  let o = options.unwrap_or_default();
   if !METHODS.contains(&method.as_str()) {
     return Err("not_allowed".into());
   }
@@ -113,13 +130,21 @@ pub async fn caldav_request(
       .request(verb.clone(), to.clone())
       .basic_auth(&login.username, Some(&login.password))
       .header("User-Agent", "Schedee (+https://github.com/heyjawrsh/schedee)");
-    if let Some(d) = &depth {
+    if let Some(d) = &o.depth {
       req = req.header("Depth", d);
     }
-    if let Some(b) = &body {
-      req = req
-        .header("Content-Type", "application/xml; charset=utf-8")
-        .body(b.clone());
+    if let Some(m) = &o.if_match {
+      req = req.header("If-Match", m);
+    }
+    if o.if_none_match == Some(true) {
+      req = req.header("If-None-Match", "*");
+    }
+    if let Some(b) = &o.body {
+      let kind = match o.content_type.as_deref() {
+        Some("text/calendar") => "text/calendar; charset=utf-8",
+        _ => "application/xml; charset=utf-8",
+      };
+      req = req.header("Content-Type", kind).body(b.clone());
     }
     let res = req.send().await.map_err(|e| format!("network: {e}"))?;
     let status = res.status();
@@ -136,6 +161,11 @@ pub async fn caldav_request(
     if res.content_length().unwrap_or(0) as usize > MAX_BYTES {
       return Err("too_large".into());
     }
+    let etag = res
+      .headers()
+      .get("ETag")
+      .and_then(|v| v.to_str().ok())
+      .map(str::to_owned);
     let bytes = res.bytes().await.map_err(|e| format!("network: {e}"))?;
     if bytes.len() > MAX_BYTES {
       return Err("too_large".into());
@@ -144,6 +174,7 @@ pub async fn caldav_request(
       status: status.as_u16(),
       body: String::from_utf8_lossy(&bytes).into_owned(),
       url: to.to_string(),
+      etag,
     });
   }
   Err("not_allowed".into())
