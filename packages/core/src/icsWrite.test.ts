@@ -182,6 +182,106 @@ describe("writeCalendarObject", () => {
 	});
 });
 
+describe("writeCalendarObject: guests, replies, alarms", () => {
+	const invite = [
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		"BEGIN:VEVENT",
+		"UID:m@x",
+		"SUMMARY:Planning",
+		"DTSTART:20261112T150000Z",
+		"DTEND:20261112T160000Z",
+		"ORGANIZER;CN=Grace:mailto:grace@example.com",
+		"ATTENDEE;PARTSTAT=ACCEPTED:mailto:grace@example.com",
+		"ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:ada@example.com",
+		"BEGIN:VALARM",
+		"ACTION:DISPLAY",
+		"TRIGGER:-PT15M",
+		"END:VALARM",
+		"END:VEVENT",
+		"END:VCALENDAR",
+	].join("\r\n");
+	const parsed = () => {
+		const [e] = read(invite, "m");
+		if (!e) throw new Error("fixture");
+		return e;
+	};
+
+	it("leaves what didn't change exactly as it was", () => {
+		const e = parsed();
+		const text = writeCalendarObject({
+			original: invite,
+			calendarId: CAL,
+			key: "m",
+			events: [{ ...e, title: "Planning (agenda)" }],
+			fallbackZone: ZONE,
+			now: NOW,
+		});
+		expect(text).toContain("DTSTART:20261112T150000Z");
+		expect(text).not.toContain("VTIMEZONE");
+		expect(text).toContain("TRIGGER:-PT15M");
+		expect(text).toContain("SUMMARY:Planning (agenda)");
+	});
+
+	it("sets the user's reply on their own line", () => {
+		const e = parsed();
+		expect(e.reminders).toEqual([15]);
+		const text = writeCalendarObject({
+			original: invite,
+			calendarId: CAL,
+			key: "m",
+			events: [
+				{
+					...e,
+					attendees: (e.attendees ?? []).map((a) =>
+						a.email === "ada@example.com"
+							? { ...a, self: true, rsvp: "accepted" as const }
+							: a,
+					),
+				},
+			],
+			fallbackZone: ZONE,
+			now: NOW,
+		});
+		expect(text.replace(/\r\n /g, "")).toContain(
+			"ATTENDEE;PARTSTAT=ACCEPTED;RSVP=TRUE:mailto:ada@example.com",
+		);
+		expect(text).toContain("ORGANIZER;CN=Grace:mailto:grace@example.com");
+	});
+
+	it("invites a new guest as the organizer, and writes alarms and privacy", () => {
+		const e: CalendarEvent = {
+			id: `${CAL}#n2`,
+			calendarId: CAL,
+			title: "Coffee",
+			start: "2026-11-14T09:00:00",
+			end: "2026-11-14T09:30:00",
+			allDay: false,
+			timeZone: ZONE,
+			attendees: [{ email: "lin@example.com", rsvp: "needsAction" }],
+			reminders: [10, 60],
+			visibility: "private",
+		};
+		const text = writeCalendarObject({
+			calendarId: CAL,
+			key: "n2",
+			events: [e],
+			fallbackZone: ZONE,
+			organizer: "ada@example.com",
+			now: NOW,
+		}).replace(/\r\n /g, "");
+		expect(text).toContain("ORGANIZER:mailto:ada@example.com");
+		expect(text).toContain("ATTENDEE;PARTSTAT=ACCEPTED:mailto:ada@example.com");
+		expect(text).toContain(
+			"ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:lin@example.com",
+		);
+		expect(text).toContain("CLASS:PRIVATE");
+		const [back] = read(text, "n2");
+		expect(back?.reminders).toEqual([10, 60]);
+		expect(back?.visibility).toBe("private");
+	});
+});
+
 describe("vtimezone", () => {
 	it("describes a zone's daylight saving changes", () => {
 		const text = vtimezone("America/Chicago").toString();

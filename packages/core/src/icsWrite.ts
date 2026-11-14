@@ -5,8 +5,14 @@
  */
 import ICAL from "ical.js";
 import { Temporal } from "temporal-polyfill";
-import { type Component, readIcs, resolveZone } from "./ics";
-import type { CalendarEvent } from "./model";
+import {
+	type Component,
+	type IcsEntry,
+	mailbox,
+	readIcs,
+	resolveZone,
+} from "./ics";
+import type { Attendee, CalendarEvent, Rsvp } from "./model";
 
 type Time = InstanceType<typeof ICAL.Time>;
 
@@ -135,20 +141,96 @@ export interface CalendarObjectInput {
 	/** The resource's events as they are now on this device: a series or single, and overrides. */
 	events: CalendarEvent[];
 	fallbackZone: string;
+	/** The user's address, written as ORGANIZER when they first invite someone. */
+	organizer?: string;
 	now?: Date;
 }
 
-/** The resource's new text: the original with our changes, or a fresh calendar. */
+const PARTSTAT: Record<Rsvp, string> = {
+	accepted: "ACCEPTED",
+	declined: "DECLINED",
+	tentative: "TENTATIVE",
+	needsAction: "NEEDS-ACTION",
+};
+
+const same = (a: unknown, b: unknown) =>
+	JSON.stringify(a) === JSON.stringify(b);
+
+/** Guests as written: removed ones go, new ones are invited, and the user's reply is set. */
+function writeAttendees(
+	comp: Component,
+	attendees: Attendee[],
+	organizer: string | undefined,
+) {
+	const wanted = new Map(attendees.map((a) => [a.email.toLowerCase(), a]));
+	const present = new Set<string>();
+	for (const p of comp.getAllProperties("attendee")) {
+		const email = mailbox(p);
+		const a = wanted.get(email);
+		if (!a) {
+			comp.removeProperty(p);
+			continue;
+		}
+		present.add(email);
+		if (a.self && a.rsvp) p.setParameter("partstat", PARTSTAT[a.rsvp]);
+	}
+	let lead = mailbox(comp.getFirstProperty("organizer"));
+	const invite = attendees.filter(
+		(a) =>
+			!present.has(a.email.toLowerCase()) &&
+			!(a.organizer && a.email.toLowerCase() === lead),
+	);
+	if (!invite.length) return;
+	if (!lead && organizer) {
+		lead = organizer.toLowerCase();
+		comp.addPropertyWithValue("organizer", `mailto:${organizer}`);
+		if (!present.has(lead)) {
+			const me = comp.addPropertyWithValue("attendee", `mailto:${organizer}`);
+			me.setParameter("partstat", "ACCEPTED");
+		}
+	}
+	for (const a of invite) {
+		if (a.email.toLowerCase() === lead) continue;
+		const p = comp.addPropertyWithValue("attendee", `mailto:${a.email}`);
+		if (a.name) p.setParameter("cn", a.name);
+		p.setParameter("partstat", PARTSTAT[a.rsvp ?? "needsAction"]);
+		p.setParameter("rsvp", "TRUE");
+		if (a.resource) p.setParameter("cutype", "ROOM");
+	}
+}
+
+/** Alarms as minutes before start; ones set another way (absolute, from the end) stay. */
+function writeReminders(comp: Component, reminders: number[]) {
+	for (const a of comp.getAllSubcomponents("valarm")) {
+		const trigger = a.getFirstProperty("trigger");
+		const relative =
+			trigger?.getFirstValue() instanceof ICAL.Duration &&
+			String(trigger?.getParameter("related") ?? "").toUpperCase() !== "END";
+		if (relative) comp.removeSubcomponent(a);
+	}
+	for (const m of reminders) {
+		const a = new ICAL.Component("valarm");
+		a.addPropertyWithValue("action", "DISPLAY");
+		a.addPropertyWithValue("description", "Reminder");
+		a.addPropertyWithValue("trigger", ICAL.Duration.fromSeconds(-m * 60));
+		comp.addSubcomponent(a);
+	}
+}
+
+/**
+ * The resource's new text: the original with our changes, or a fresh calendar. Only fields that
+ * differ from the original are rewritten, so the rest stays exactly as the server had it.
+ */
 export function writeCalendarObject(input: CalendarObjectInput): string {
 	const { calendarId, key, events, fallbackZone } = input;
 	const now = input.now ?? new Date();
 	const resourceId = `${calendarId}#${key}`;
 	let calendar: Component;
-	let byId = new Map<string, Component>();
+	let byId = new Map<string, IcsEntry>();
 	if (input.original) {
 		const read = readIcs(input.original, calendarId, fallbackZone, key);
 		calendar = read.calendar;
-		byId = new Map(read.entries.map((e) => [e.event.id, e.component]));
+		byId = new Map(read.entries.map((e) => [e.event.id, e]));
 	} else {
 		calendar = new ICAL.Component("vcalendar");
 		calendar.addPropertyWithValue("version", "2.0");
@@ -156,11 +238,11 @@ export function writeCalendarObject(input: CalendarObjectInput): string {
 		calendar.addPropertyWithValue("calscale", "GREGORIAN");
 	}
 	const local = new Set(events.map((e) => e.id));
-	for (const [id, comp] of byId)
-		if (!local.has(id)) calendar.removeSubcomponent(comp);
+	for (const [id, entry] of byId)
+		if (!local.has(id)) calendar.removeSubcomponent(entry.component);
 
 	const uid =
-		[...byId.values()][0]?.getFirstPropertyValue("uid")?.toString() ??
+		[...byId.values()][0]?.component.getFirstPropertyValue("uid")?.toString() ??
 		`${key}@sched.ee`;
 	const master = events.find((e) => e.id === resourceId);
 	// The series first, so overrides can take its zone.
@@ -172,23 +254,61 @@ export function writeCalendarObject(input: CalendarObjectInput): string {
 	const zones = new Set<string>();
 
 	for (const e of ordered) {
-		let comp = byId.get(e.id);
+		const entry = byId.get(e.id);
+		const before = entry?.event;
+		let comp = entry?.component;
 		if (!comp) {
 			comp = new ICAL.Component("vevent");
 			comp.addPropertyWithValue("uid", uid);
 			calendar.addSubcomponent(comp);
 		}
+		const changed = (...k: (keyof CalendarEvent)[]) =>
+			!before || k.some((f) => !same(before[f], e[f]));
+		let touched = !before;
+
 		const zone = e.timeZone ?? fallbackZone;
 		const tzid = e.allDay ? undefined : tzidFor(comp, "dtstart", zone);
-		if (tzid === zone && !e.allDay) zones.add(zone);
-		setTimes(comp, "dtstart", [e.start], e.allDay, tzid);
-		comp.removeAllProperties("duration");
-		setTimes(comp, "dtend", [e.end], e.allDay, tzid);
-		comp.updatePropertyWithValue("summary", e.title);
-		setText(comp, "location", e.location);
-		setText(comp, "description", e.description);
-		if (e.busy === false) comp.updatePropertyWithValue("transp", "TRANSPARENT");
-		else comp.removeAllProperties("transp");
+		if (changed("start", "end", "allDay", "timeZone")) {
+			touched = true;
+			if (tzid === zone && !e.allDay) zones.add(zone);
+			setTimes(comp, "dtstart", [e.start], e.allDay, tzid);
+			comp.removeAllProperties("duration");
+			setTimes(comp, "dtend", [e.end], e.allDay, tzid);
+		}
+		if (changed("title")) {
+			touched = true;
+			comp.updatePropertyWithValue("summary", e.title);
+		}
+		if (changed("location")) {
+			touched = true;
+			setText(comp, "location", e.location);
+		}
+		if (changed("description")) {
+			touched = true;
+			setText(comp, "description", e.description);
+		}
+		if (changed("busy")) {
+			touched = true;
+			if (e.busy === false)
+				comp.updatePropertyWithValue("transp", "TRANSPARENT");
+			else comp.removeAllProperties("transp");
+		}
+		if (changed("visibility")) {
+			touched = true;
+			if (e.visibility === "public")
+				comp.updatePropertyWithValue("class", "PUBLIC");
+			else if (e.visibility === "private")
+				comp.updatePropertyWithValue("class", "PRIVATE");
+			else comp.removeAllProperties("class");
+		}
+		if (changed("reminders")) {
+			touched = true;
+			writeReminders(comp, e.reminders ?? []);
+		}
+		if (changed("attendees")) {
+			touched = true;
+			writeAttendees(comp, e.attendees ?? [], input.organizer);
+		}
 
 		if (e.recurringEventId) {
 			if (!comp.hasProperty("recurrence-id") && e.originalStart) {
@@ -203,25 +323,29 @@ export function writeCalendarObject(input: CalendarObjectInput): string {
 				);
 				if (!seriesAllDay && !masterTzid) zones.add(seriesZone);
 			}
-			if (e.status === "cancelled")
-				comp.updatePropertyWithValue("status", "CANCELLED");
-			else if (
-				String(comp.getFirstPropertyValue("status")).toUpperCase() ===
-				"CANCELLED"
-			)
-				comp.removeAllProperties("status");
+			if (changed("status")) {
+				touched = true;
+				if (e.status === "cancelled")
+					comp.updatePropertyWithValue("status", "CANCELLED");
+				else comp.removeAllProperties("status");
+			}
 		} else {
 			masterTzid = tzid;
-			comp.removeAllProperties("rrule");
-			if (e.recurrence) {
-				comp.addPropertyWithValue(
-					"rrule",
-					ICAL.Recur.fromString(e.recurrence.rrule),
-				);
-				setTimes(comp, "exdate", e.recurrence.exdates ?? [], e.allDay, tzid);
-			} else comp.removeAllProperties("exdate");
+			if (changed("recurrence", "allDay", "timeZone")) {
+				touched = true;
+				comp.removeAllProperties("rrule");
+				if (e.recurrence) {
+					comp.addPropertyWithValue(
+						"rrule",
+						ICAL.Recur.fromString(e.recurrence.rrule),
+					);
+					setTimes(comp, "exdate", e.recurrence.exdates ?? [], e.allDay, tzid);
+					if (tzid === zone && !e.allDay) zones.add(zone);
+				} else comp.removeAllProperties("exdate");
+			}
 		}
 
+		if (!touched) continue;
 		const seq = Number(comp.getFirstPropertyValue("sequence") ?? 0);
 		comp.updatePropertyWithValue(
 			"sequence",

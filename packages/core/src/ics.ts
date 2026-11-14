@@ -244,7 +244,7 @@ const RSVP: Record<string, Rsvp> = {
 	DECLINED: "declined",
 	"NEEDS-ACTION": "needsAction",
 };
-const mailbox = (p: Property | null) => {
+export const mailbox = (p: Property | null) => {
 	const v = p?.getFirstValue();
 	return typeof v === "string"
 		? v
@@ -376,5 +376,26 @@ function mapVevent(
 	if (description) out.description = description;
 	const attendees = attendeesOf(v);
 	if (attendees.length) out.attendees = attendees;
+	const klass = String(v.getFirstPropertyValue("class") ?? "").toUpperCase();
+	if (klass === "PUBLIC") out.visibility = "public";
+	else if (klass === "PRIVATE" || klass === "CONFIDENTIAL")
+		out.visibility = "private";
+	const reminders = remindersOf(v);
+	if (reminders.length) out.reminders = reminders;
 	return out;
+}
+
+/** Minutes before start, for alarms set relative to the start. */
+export function remindersOf(v: Component): number[] {
+	const out = new Set<number>();
+	for (const a of v.getAllSubcomponents("valarm")) {
+		const trigger = a.getFirstProperty("trigger");
+		const value = trigger?.getFirstValue();
+		if (!(value instanceof ICAL.Duration)) continue;
+		if (String(trigger?.getParameter("related") ?? "").toUpperCase() === "END")
+			continue;
+		const minutes = -Math.round(value.toSeconds() / 60);
+		if (minutes >= 0) out.add(minutes);
+	}
+	return [...out].sort((a, b) => a - b);
 }
