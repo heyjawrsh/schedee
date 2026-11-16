@@ -251,5 +251,27 @@ describe("local store", () => {
 			calendarId: "g/cal",
 			accountId: "g",
 		});
+		// The user hears about it once, until they dismiss it.
+		expect((await db.accounts.get("g"))?.dropped).toBe(1);
+		await store.dismissDropped("g");
+		expect((await db.accounts.get("g"))?.dropped).toBeUndefined();
+	});
+
+	it("keeps an account's sync status through a calendar list refresh", async () => {
+		const db = fresh();
+		const store = createLocalStore(seed, db);
+		await store.ready;
+		const account = {
+			id: "g",
+			label: "g",
+			provider: "google" as const,
+			calendars: [{ id: "g/cal", name: "cal", color: "#000000" }],
+		};
+		await store.upsertAccount(account);
+		await store.setAccountProblem("g", "signed_out");
+		await store.upsertAccount(account);
+		expect((await db.accounts.get("g"))?.problem).toBe("signed_out");
+		await store.setAccountProblem("g", undefined);
+		expect((await db.accounts.get("g"))?.problem).toBeUndefined();
 	});
 });

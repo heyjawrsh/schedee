@@ -1,4 +1,4 @@
-import type { GoogleEvent, GoogleInstanceRef } from "@schedee/core";
+import type { Account, GoogleEvent, GoogleInstanceRef } from "@schedee/core";
 import type { LocalStore, QueuedWrite } from "../../store/db";
 import { GoogleAuthError } from "./auth";
 import { type Fetcher, GoogleApiError, googleFetcher } from "./sync";
@@ -23,6 +23,20 @@ function classify(e: unknown): "retry" | "auth" | "drop" | "offline" {
 	}
 	// fetch rejects with a TypeError when there's no network.
 	return "offline";
+}
+
+/**
+ * What a failed sync means for the account: signed out (only signing in again helps), failing
+ * for another reason, or nothing to show (offline).
+ */
+export function problemFor(e: unknown): Account["problem"] {
+	if (e instanceof GoogleAuthError)
+		return e.code === "invalid_grant" || e.code === "not_signed_in"
+			? "signed_out"
+			: "sync_failed";
+	if (e instanceof GoogleApiError)
+		return e.status === 401 ? "signed_out" : "sync_failed";
+	return e instanceof TypeError ? undefined : "sync_failed";
 }
 
 const is = (e: unknown, ...status: number[]) =>
