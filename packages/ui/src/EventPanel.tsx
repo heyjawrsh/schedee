@@ -71,7 +71,10 @@ export interface EventPanelProps {
 	focusTitle?: boolean;
 }
 
-/** Text that commits on Enter or blur, and reverts on Escape. */
+/**
+ * Text that commits on Enter or blur, and reverts on Escape. A change that syncs in while the user
+ * is typing doesn't replace their text; it shows once they're done.
+ */
 function Field({
 	value,
 	placeholder,
@@ -94,11 +97,16 @@ function Field({
 }) {
 	const [draft, setDraft] = useState(value);
 	const ref = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
+	/** The user has typed since focusing. */
+	const typing = useRef(false);
 	useEffect(() => {
 		if (focus) ref.current?.focus();
 	}, [focus]);
-	useEffect(() => setDraft(value), [value]);
+	useEffect(() => {
+		if (!typing.current) setDraft(value);
+	}, [value]);
 	const commit = () => {
+		typing.current = false;
 		if (draft === value) return;
 		if (onCommit(draft) === false) setDraft(value);
 	};
@@ -109,13 +117,17 @@ function Field({
 		placeholder,
 		readOnly,
 		"aria-label": label,
-		onChange: (e: { target: { value: string } }) => setDraft(e.target.value),
+		onChange: (e: { target: { value: string } }) => {
+			typing.current = true;
+			setDraft(e.target.value);
+		},
 		onBlur: commit,
 		onKeyDown: (
 			e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>,
 		) => {
 			e.stopPropagation();
 			if (e.key === "Escape") {
+				typing.current = false;
 				setDraft(value);
 				(e.target as HTMLElement).blur();
 			}

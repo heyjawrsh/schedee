@@ -37,3 +37,63 @@ export const desktopRefresh = (accountId: string) =>
 /** Drops an account's refresh token from the keychain. */
 export const desktopForget = (accountId: string) =>
 	call<void>("google_forget", { accountId });
+
+/** What a feed fetch brings back; 304 has no body. */
+export interface FeedResponse {
+	status: number;
+	body?: string;
+	etag?: string;
+	lastModified?: string;
+}
+
+/** Fetches an ICS feed from Rust, where CORS doesn't apply. */
+export const desktopFetchFeed = (
+	url: string,
+	etag?: string,
+	lastModified?: string,
+) =>
+	call<FeedResponse>("fetch_feed", {
+		url,
+		etag: etag ?? null,
+		lastModified: lastModified ?? null,
+	});
+
+/** What a WebDAV request through Rust brings back. */
+export interface DavResponse {
+	status: number;
+	body: string;
+	/** Where it ended up after redirects. */
+	url: string;
+	/** The resource's new version after a write, when the server says. */
+	etag?: string;
+}
+
+export type DavMethod = "PROPFIND" | "REPORT" | "GET" | "PUT" | "DELETE";
+
+export interface DavOptions {
+	depth?: "0" | "1";
+	body?: string;
+	contentType?: "text/calendar";
+	/** Only write over this version. */
+	ifMatch?: string;
+	/** Only create: fail if the resource exists. */
+	ifNoneMatch?: boolean;
+}
+
+/** Saves a CalDAV login to the keychain; the password never comes back out. */
+export const desktopCalDavSave = (
+	accountId: string,
+	login: { server: string; username: string; password: string },
+) => call<void>("caldav_save", { accountId, ...login });
+
+/** Drops a CalDAV login from the keychain. */
+export const desktopCalDavForget = (accountId: string) =>
+	call<void>("caldav_forget", { accountId });
+
+/** One WebDAV request, sent from Rust with the account's login. */
+export const desktopDav = (
+	accountId: string,
+	method: DavMethod,
+	url: string,
+	options: DavOptions = {},
+) => call<DavResponse>("caldav_request", { accountId, method, url, options });

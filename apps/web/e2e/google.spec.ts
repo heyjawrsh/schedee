@@ -325,3 +325,51 @@ test("a revoked sign-in asks to sign in again, and a refused edit says so", asyn
 	// The calendar went back to what Google has.
 	await expect(chip(page, "Kickoff")).toBeVisible();
 });
+
+test("removing an account clears it from this device and brings the demo back", async ({
+	page,
+	context,
+}) => {
+	const google = await fakeGoogle(context);
+	await page.addInitScript(() => {
+		window.__SCHEDEE_SCROLL_TOP__ = 8 * 48;
+	});
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto("/");
+	await page.locator("[data-schedee-ready]").waitFor();
+	await page.keyboard.press("ControlOrMeta+k");
+	await page.keyboard.type("google");
+	await page.keyboard.press("Enter");
+	await expect(chip(page, "Kickoff")).toBeVisible();
+	const sidebar = page.locator(".sch-sidebar");
+
+	// Enter twice lands on Cancel: nothing goes.
+	await page.keyboard.press("ControlOrMeta+k");
+	await page.keyboard.type("remove account");
+	await page.keyboard.press("Enter");
+	await expect(
+		page.getByRole("option", { name: "Remove from this device" }),
+	).toBeVisible();
+	await page.keyboard.press("Enter");
+	await expect(page.getByRole("dialog", { name: "Command menu" })).toHaveCount(
+		0,
+	);
+	await expect(chip(page, "Kickoff")).toBeVisible();
+
+	await page.keyboard.press("ControlOrMeta+k");
+	await page.keyboard.type("remove account");
+	await page.keyboard.press("Enter");
+	await page.getByRole("option", { name: "Remove from this device" }).click();
+	await expect(chip(page, "Kickoff")).toHaveCount(0);
+	await expect(sidebar).not.toContainText("ada@example.com");
+	await expect(chip(page, "Standup").first()).toBeVisible();
+	const writes = google.writes.length;
+
+	// Nothing comes back on the next sync or a reload.
+	await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+	await page.reload();
+	await page.locator("[data-schedee-ready]").waitFor();
+	await expect(chip(page, "Standup").first()).toBeVisible();
+	await expect(sidebar).not.toContainText("ada@example.com");
+	expect(google.writes).toHaveLength(writes);
+});
