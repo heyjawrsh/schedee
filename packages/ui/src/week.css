@@ -541,7 +541,14 @@
 	left: 0;
 	right: 0;
 	bottom: 0;
-	overflow: hidden;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	/* Our choice: no scrollbar, so the grid keeps its full width. */
+	scrollbar-width: none;
+}
+.sch-grid::-webkit-scrollbar {
+	display: none;
 }
 .sch-grid__inner {
 	position: relative;

@@ -19,8 +19,17 @@ export interface CommandItem {
 	run?: () => void;
 	/** Opens a sub-list instead of running. */
 	items?: CommandItem[];
-	/** Asks for text; `submit` returns false to keep asking. */
-	prompt?: { placeholder: string; submit: (text: string) => boolean };
+	/** Asks for text. */
+	prompt?: {
+		placeholder: string;
+		/** Hides what's typed, for passwords. */
+		secret?: boolean;
+		/**
+		 * True closes the menu and false keeps asking. A command opens next (the next question).
+		 * A promise holds the menu while it settles, then closes on true or asks again.
+		 */
+		submit: (text: string) => boolean | CommandItem | Promise<boolean>;
+	};
 }
 
 export interface CommandGroup {
@@ -93,6 +102,7 @@ export function CommandMenu({
 	const [query, setQuery] = useState("");
 	const [active, setActive] = useState(0);
 	const [invalid, setInvalid] = useState(false);
+	const [busy, setBusy] = useState(false);
 	const input = useRef<HTMLInputElement>(null);
 	const list = useRef<HTMLDivElement>(null);
 	const listId = useId();
@@ -175,8 +185,20 @@ export function CommandMenu({
 		} else if (e.key === "Enter") {
 			e.preventDefault();
 			if (current.kind === "prompt") {
-				if (current.item.prompt?.submit(query)) onClose();
-				else setInvalid(true);
+				if (busy) return;
+				const r = current.item.prompt?.submit(query) ?? false;
+				if (r === true) onClose();
+				else if (r === false) setInvalid(true);
+				else if (r instanceof Promise) {
+					setBusy(true);
+					r.then(
+						(ok) => (ok ? onClose() : setInvalid(true)),
+						() => setInvalid(true),
+					).finally(() => setBusy(false));
+				} else {
+					const next = pageFor(r);
+					if (next) open(next);
+				}
 			} else choose(activeItem);
 		}
 	};
@@ -195,6 +217,14 @@ export function CommandMenu({
 					<input
 						ref={input}
 						value={query}
+						type={
+							current.kind === "prompt" && current.item.prompt?.secret
+								? "password"
+								: "text"
+						}
+						autoComplete="off"
+						readOnly={busy}
+						aria-busy={busy || undefined}
 						role="combobox"
 						aria-expanded={current.kind === "list"}
 						aria-controls={listId}
