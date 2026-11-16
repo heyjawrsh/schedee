@@ -1,4 +1,5 @@
 import {
+	applyCalendarChange,
 	applyDelete,
 	applyDuplicate,
 	applyEdit,
@@ -13,6 +14,7 @@ import {
 	goTo,
 	initialView,
 	invertEdit,
+	newEventId,
 	searchEvents,
 	setView,
 	step,
@@ -26,7 +28,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CommandMenu } from "./CommandMenu";
 import { ContextPanel } from "./ContextPanel";
 import type { Theme } from "./chipColors";
-import { buildCommands, type ThemeChoice } from "./commands";
+import {
+	buildCommands,
+	type CalDavLogin,
+	type GlobalAction,
+	type ThemeChoice,
+} from "./commands";
 import { DaysView } from "./DaysView";
 import { EventPanel } from "./EventPanel";
 import { Header } from "./Header";
@@ -51,7 +58,6 @@ function useSize(fallback: { width: number; height: number }) {
 	return [ref, size] as const;
 }
 
-const newId = () => crypto.randomUUID();
 /** How far back and ahead search looks for occurrences of repeating events. */
 const SEARCH_YEARS_BACK = 5;
 const SEARCH_YEARS_AHEAD = 2;
@@ -76,6 +82,29 @@ export interface SchedeeProps {
 	onTheme?: (t: ThemeChoice) => void;
 	/** Hide or show a calendar. Without it the command menu leaves calendars out. */
 	onCalendarVisibility?: (calendarId: string, hidden: boolean) => void;
+	/** Start connecting a Google account. Without it the menu doesn't offer one. */
+	onAddAccount?: () => void;
+	/** Sign an account in again after its sign-in expired. */
+	onReconnect?: (accountId: string) => void;
+	/** Add an iCloud or other CalDAV account. Without it the menu doesn't offer one. */
+	onAddCalDav?: (login: CalDavLogin) => Promise<boolean>;
+	/** Sign a CalDAV account in again with a new password. */
+	onReconnectCalDav?: (accountId: string, password: string) => Promise<boolean>;
+	/** Remove a synced account from this device. Without it the menu doesn't offer to. */
+	onRemoveAccount?: (accountId: string) => void;
+	/** Subscribe to an ICS feed. Without it the menu doesn't offer to. */
+	onSubscribeFeed?: (url: string) => void;
+	/** Remove a feed subscription. */
+	onUnsubscribeFeed?: (calendarId: string) => void;
+	/** Clear an account's "changes weren't saved" notice. */
+	onDismissDropped?: (accountId: string) => void;
+	/** Desktop: opening at login and system-wide shortcuts, for the command menu. */
+	launchAtLogin?: boolean;
+	onLaunchAtLogin?: (on: boolean) => void;
+	globalShortcuts?: Record<GlobalAction, string>;
+	onGlobalShortcut?: (action: GlobalAction, keys: string) => Promise<boolean>;
+	/** Each new value starts a new event today, as from a system-wide shortcut. */
+	createRequest?: number;
 }
 
 /** The app frame: sidebar, main view (day, N days, week or month) and context panel. */
@@ -89,6 +118,19 @@ export function Schedee({
 	themeChoice,
 	onTheme,
 	onCalendarVisibility,
+	onAddAccount,
+	onReconnect,
+	onAddCalDav,
+	onReconnectCalDav,
+	onRemoveAccount,
+	onSubscribeFeed,
+	onUnsubscribeFeed,
+	onDismissDropped,
+	launchAtLogin,
+	onLaunchAtLogin,
+	globalShortcuts,
+	onGlobalShortcut,
+	createRequest,
 }: SchedeeProps) {
 	useEffect(() => {
 		document.documentElement.dataset.theme = theme;
@@ -167,7 +209,7 @@ export function Schedee({
 	const selected = instances.find((i) => i.id === selectedId) ?? null;
 	const selectedCal = selected ? calendars.get(selected.calendarId) : undefined;
 	const writable = useMemo(
-		() => [...calendars.values()].filter((c) => !c.subscribed),
+		() => [...calendars.values()].filter((c) => !c.subscribed && !c.readOnly),
 		[calendars],
 	);
 	/** Subscribed calendars and events someone else organizes can't be changed here. */
@@ -177,6 +219,7 @@ export function Schedee({
 			!!onCommit &&
 			!!cal &&
 			!cal.subscribed &&
+			!cal.readOnly &&
 			!i.attendees?.some((a) => a.organizer && !a.self)
 		);
 	};
@@ -186,13 +229,13 @@ export function Schedee({
 	const [focusTitle, setFocusTitle] = useState<string | null>(null);
 
 	const duplicate = (i: EventInstance, start?: string, end?: string) => {
-		const id = newId();
+		const id = newEventId(i.calendarId);
 		commit(applyDuplicate(i, id, start, end));
 		setSelectedId(id);
 	};
 	const create = (start: string, end: string) => {
 		if (!defaultCalendar) return;
-		const id = newId();
+		const id = newEventId(defaultCalendar.id);
 		commit({
 			put: [
 				{
@@ -221,6 +264,19 @@ export function Schedee({
 		create(start.toString(), start.add({ hours: 1 }).toString());
 	};
 	const canCreate = !!onCommit && !!defaultCalendar;
+
+	// A system-wide shortcut: go to today and start an event at the next quarter hour.
+	const createToday = useRef<() => void>(() => {});
+	createToday.current = () => {
+		if (!canCreate) return;
+		setViewState((v) => goTo(v, today));
+		const next = Math.ceil((now.hour * 60 + now.minute + 1) / 15) * 15;
+		const start = today.toPlainDateTime().add({ minutes: next });
+		create(start.toString(), start.add({ hours: 1 }).toString());
+	};
+	useEffect(() => {
+		if (createRequest) createToday.current();
+	}, [createRequest]);
 
 	// Search: the query lives here so results survive opening an event from them.
 	const [query, setQuery] = useState("");
@@ -259,9 +315,38 @@ export function Schedee({
 		createEvent: canCreate ? createNow : undefined,
 		calendars: [...calendars.values()],
 		onCalendarVisibility,
+		onAddAccount,
+		signedOut: snapshot.accounts.filter((a) => a.problem === "signed_out"),
+		onReconnect,
+		onAddCalDav,
+		onReconnectCalDav,
+		removable: snapshot.accounts.filter(
+			(a) => a.provider === "google" || a.provider === "caldav",
+		),
+		onRemoveAccount,
+		onSubscribeFeed,
+		feeds: snapshot.accounts
+			.filter((a) => a.provider === "ics")
+			.flatMap((a) => a.calendars),
+		onUnsubscribeFeed,
 		theme: themeChoice,
 		onTheme,
+		launchAtLogin,
+		onLaunchAtLogin,
+		globalShortcuts,
+		onGlobalShortcut,
 	});
+
+	// A CalDAV account signs in again with a password, asked for in the menu.
+	const reconnect =
+		onReconnect || onReconnectCalDav
+			? (id: string) => {
+					const a = snapshot.accounts.find((x) => x.id === id);
+					if (a?.provider === "caldav") {
+						if (onReconnectCalDav) setMenu({ start: `reconnect-${id}` });
+					} else onReconnect?.(id);
+				}
+			: undefined;
 
 	// Keyboard actions read the latest render through this ref.
 	const actions = useRef({
@@ -330,12 +415,10 @@ export function Schedee({
 				}
 				return;
 			}
-			if (
-				(e.key === "Backspace" || e.key === "Delete") &&
-				a.selected &&
-				!a.readOnly
-			) {
+			if ((e.key === "Backspace" || e.key === "Delete") && a.selected) {
+				// Even when the event can't be deleted, Backspace mustn't navigate the page back.
 				e.preventDefault();
+				if (a.readOnly) return;
 				a.commit(applyDelete(eventsRef.current, a.selected));
 				setSelectedId(null);
 				return;
@@ -376,6 +459,8 @@ export function Schedee({
 				focus={view.anchor}
 				{...(view.kind === "month" ? {} : { band: weekOf(first).start })}
 				onPickDate={(d) => setViewState((v) => goTo(v, d))}
+				onReconnect={reconnect}
+				onDismissDropped={onDismissDropped}
 			/>
 			<main className="sch-main" ref={mainRef}>
 				<Header
@@ -450,9 +535,21 @@ export function Schedee({
 						readOnly={readOnly}
 						theme={theme}
 						focusTitle={focusTitle === selected.id}
-						onChange={(patch, scope) =>
-							commit(applyEdit(eventsRef.current, selected, patch, scope))
-						}
+						onChange={(patch, scope) => {
+							const { calendarId } = patch;
+							if (calendarId && calendarId !== selected.calendarId) {
+								// Ids carry their calendar, so a calendar change is a move.
+								const r = applyCalendarChange(
+									eventsRef.current,
+									selected,
+									calendarId,
+								);
+								commit({ put: r.put, remove: r.remove });
+								setSelectedId(r.id);
+								return;
+							}
+							commit(applyEdit(eventsRef.current, selected, patch, scope));
+						}}
 						onDelete={(scope) => {
 							commit(applyDelete(eventsRef.current, selected, scope));
 							setSelectedId(null);

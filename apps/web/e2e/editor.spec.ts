@@ -61,6 +61,7 @@ test("renaming one occurrence of a series only changes that day, and persists", 
 	await title.press("Enter");
 	await expect(chip(page, "Standup (moved)")).toHaveCount(1);
 	await expect(chip(page, /^Standup10/)).toHaveCount(4);
+	await page.evaluate(() => window.__SCHEDEE_SAVED__?.());
 	await page.reload();
 	await page.locator("[data-schedee-ready]").waitFor();
 	await expect(chip(page, "Standup (moved)")).toHaveCount(1);
@@ -104,6 +105,44 @@ test("a single event keeps its length when the start moves, and can be deleted",
 		.click({ timeout: 4000 });
 	await expect(chip(page, "Dentist")).toHaveCount(0);
 	await expect(panel(page)).toHaveCount(0);
+});
+
+test("a change that syncs in doesn't replace what the user is typing", async ({
+	page,
+	context,
+}) => {
+	await open(page);
+	await insert(page, {
+		id: "dentist",
+		calendarId: "personal",
+		title: "Dentist",
+		start: `${today()}T07:00:00`,
+		end: `${today()}T08:00:00`,
+		allDay: false,
+	});
+	await chip(page, "Dentist").click();
+	const end = panel(page).getByLabel("End");
+	const title = panel(page).getByLabel("Title");
+	await end.fill("7:30");
+
+	// Another window changes the same event meanwhile.
+	const other = await context.newPage();
+	await open(other);
+	await chip(other, "Dentist").click();
+	const otherTitle = panel(other).getByLabel("Title");
+	await otherTitle.fill("Dentist (moved)");
+	await otherTitle.press("Enter");
+	const otherEnd = panel(other).getByLabel("End");
+	await otherEnd.fill("8:30");
+	await otherEnd.press("Enter");
+
+	await page.bringToFront();
+	await expect(title).toHaveValue("Dentist (moved)");
+	await expect(end).toHaveValue("7:30");
+	await end.press("Enter");
+	await expect(end).toHaveValue(/7:30/);
+	// The other window wasn't typing, so it picks up the change.
+	await expect(otherEnd).toHaveValue(/7:30/);
 });
 
 test("events on subscribed calendars are read-only", async ({ page }) => {

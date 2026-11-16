@@ -26,6 +26,105 @@ const setup = (over: Partial<Parameters<typeof buildCommands>[0]> = {}) => {
 };
 
 describe("command list", () => {
+	it("offers to sign signed-out accounts in again, first", () => {
+		const ids: string[] = [];
+		const { groups, item } = setup({
+			signedOut: [{ id: "google:ada@example.com", label: "ada@example.com" }],
+			onReconnect: (id) => ids.push(id),
+			onAddAccount: () => {},
+		});
+		const accounts = groups.find((g) => g.label === "Accounts");
+		expect(accounts?.items.map((i) => i.label)).toEqual([
+			"Sign in again: ada@example.com",
+			"Add Google Calendar account",
+		]);
+		item("reconnect-google:ada@example.com").run?.();
+		expect(ids).toEqual(["google:ada@example.com"]);
+	});
+
+	it("asks before removing an account", () => {
+		const ids: string[] = [];
+		const { item } = setup({
+			removable: [{ id: "google:ada@example.com", label: "ada@example.com" }],
+			onRemoveAccount: (id) => ids.push(id),
+		});
+		const remove = item("remove-google:ada@example.com");
+		expect(remove.label).toBe("Remove account: ada@example.com…");
+		expect(remove.run).toBeUndefined();
+		const [no, yes] = remove.items ?? [];
+		expect([no?.label, yes?.label]).toEqual([
+			"Cancel",
+			"Remove from this device",
+		]);
+		no?.run?.();
+		expect(ids).toEqual([]);
+		yes?.run?.();
+		expect(ids).toEqual(["google:ada@example.com"]);
+	});
+
+	it("subscribes to feed links only, and asks before unsubscribing", () => {
+		const subscribed: string[] = [];
+		const gone: string[] = [];
+		const { item } = setup({
+			onSubscribeFeed: (url) => subscribed.push(url),
+			feeds: [{ id: "ics:1", name: "Team rota" }],
+			onUnsubscribeFeed: (id) => gone.push(id),
+		});
+		const submit = item("subscribe-feed").prompt?.submit;
+		expect(submit?.("not a link")).toBe(false);
+		expect(submit?.("webcal://example.com/a.ics")).toBe(true);
+		expect(subscribed).toEqual(["https://example.com/a.ics"]);
+
+		const un = item("unsubscribe-ics:1");
+		expect(un.label).toBe("Unsubscribe from “Team rota”…");
+		const [no, yes] = un.items ?? [];
+		expect(no?.label).toBe("Cancel");
+		no?.run?.();
+		expect(gone).toEqual([]);
+		yes?.run?.();
+		expect(gone).toEqual(["ics:1"]);
+	});
+
+	it("asks for an Apple ID, then a hidden password, and waits on the check", async () => {
+		const logins: unknown[] = [];
+		const { item } = setup({
+			onAddCalDav: async (login) => {
+				logins.push(login);
+				return login.password === "abcd-efgh-ijkl-mnop";
+			},
+		});
+		const email = item("add-icloud").prompt;
+		expect(email?.submit("ada")).toBe(false);
+		const next = email?.submit(" ada@example.com ");
+		if (typeof next !== "object" || next instanceof Promise)
+			throw new Error("expected the password step");
+		expect(next.prompt?.secret).toBe(true);
+		expect(next.prompt?.submit("  ")).toBe(false);
+		expect(await next.prompt?.submit("wrong")).toBe(false);
+		expect(await next.prompt?.submit("abcd-efgh-ijkl-mnop")).toBe(true);
+		expect(logins.at(-1)).toEqual({
+			username: "ada@example.com",
+			password: "abcd-efgh-ijkl-mnop",
+		});
+	});
+
+	it("asks a signed-out CalDAV account for its password again", async () => {
+		const calls: [string, string][] = [];
+		const { item } = setup({
+			signedOut: [
+				{ id: "caldav:ada", label: "ada@example.com", provider: "caldav" },
+			],
+			onReconnectCalDav: async (id, pw) => {
+				calls.push([id, pw]);
+				return true;
+			},
+		});
+		const again = item("reconnect-caldav:ada");
+		expect(again.prompt?.secret).toBe(true);
+		expect(await again.prompt?.submit("new")).toBe(true);
+		expect(calls).toEqual([["caldav:ada", "new"]]);
+	});
+
 	it("only offers what can be done", () => {
 		const labels = setup().groups.map((g) => g.label);
 		expect(labels).toEqual(["Navigation", "View"]);
@@ -67,5 +166,51 @@ describe("command list", () => {
 		expect(item("cal-b").label).toBe("Show “Gym” calendar");
 		item("cal-b").run?.();
 		expect(calls).toEqual([["b", false]]);
+	});
+});
+
+describe("desktop settings", () => {
+	it("turns opening at login on and off", () => {
+		const set: boolean[] = [];
+		const off = setup({
+			launchAtLogin: false,
+			onLaunchAtLogin: (on) => set.push(on),
+		});
+		expect(off.item("launch-at-login").label).toBe("Open Schedee at login");
+		off.item("launch-at-login").run?.();
+		const on = setup({
+			launchAtLogin: true,
+			onLaunchAtLogin: (v) => set.push(v),
+		});
+		expect(on.item("launch-at-login").label).toBe(
+			"Don't open Schedee at login",
+		);
+		on.item("launch-at-login").run?.();
+		expect(set).toEqual([true, false]);
+	});
+
+	it("changes a shortcut from typed keys, or turns it off", async () => {
+		const calls: [string, string][] = [];
+		const { item } = setup({
+			globalShortcuts: { show: "⌃⌥⌘S", "new-event": "" },
+			onGlobalShortcut: async (action, keys) => {
+				calls.push([action, keys]);
+				return true;
+			},
+		});
+		expect(item("global-show").label).toBe(
+			"Change shortcut to show or hide Schedee… (⌃⌥⌘S)",
+		);
+		expect(item("global-new-event").label).toBe(
+			"Change shortcut to create an event…",
+		);
+		const prompt = item("global-show").prompt;
+		expect(prompt?.submit("s")).toBe(false);
+		expect(await prompt?.submit("ctrl+option+cmd+k")).toBe(true);
+		expect(await prompt?.submit("off")).toBe(true);
+		expect(calls).toEqual([
+			["show", "ctrl+option+cmd+k"],
+			["show", ""],
+		]);
 	});
 });

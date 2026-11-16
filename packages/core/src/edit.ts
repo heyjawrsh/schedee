@@ -183,3 +183,61 @@ export function applyDelete(
 			.map((e) => e.id),
 	};
 }
+
+/**
+ * A new event id: the calendar id, then a 32-character token. The token uses only `0-9a-f`, which
+ * providers like Google accept as a client-chosen event id, so a synced copy keeps the same id.
+ */
+export const newEventId = (calendarId: string) =>
+	`${calendarId}#${crypto.randomUUID().replaceAll("-", "")}`;
+
+/**
+ * The part of an event's id after its calendar: `cal#tok` gives `tok`, an override `cal#tok~2026-11-10`
+ * gives `tok~2026-11-10`. Ids from elsewhere (demo data) come back whole. Calendar ids can contain
+ * `#` themselves, so this strips the known prefix rather than splitting.
+ */
+export const eventToken = (e: Pick<CalendarEvent, "id" | "calendarId">) =>
+	e.id.startsWith(`${e.calendarId}#`)
+		? e.id.slice(e.calendarId.length + 1)
+		: e.id;
+
+/** The id `e` would have in `calendarId`. */
+export const rehome = (
+	e: Pick<CalendarEvent, "id" | "calendarId">,
+	calendarId: string,
+) => `${calendarId}#${eventToken(e)}`;
+
+/**
+ * Moves a displayed instance's event to another calendar: the whole series for an occurrence, with
+ * its overrides. Ids change with the calendar, so this removes the old records and puts new ones.
+ */
+export function applyCalendarChange(
+	stored: CalendarEvent[],
+	instance: EventInstance,
+	calendarId: string,
+): EditResult & { id: string } {
+	const source =
+		stored.find((e) => e.id === instance.sourceId) ?? strip(instance);
+	const masterId = rehome(source, calendarId);
+	const moved = [
+		source,
+		...stored.filter((e) => e.recurringEventId === source.id),
+	].map((e) =>
+		clean({
+			...e,
+			id: rehome(e, calendarId),
+			calendarId,
+			recurringEventId: e.recurringEventId ? masterId : undefined,
+		}),
+	);
+	return {
+		put: moved,
+		remove: [
+			source.id,
+			...stored
+				.filter((e) => e.recurringEventId === source.id)
+				.map((e) => e.id),
+		],
+		id: masterId + instance.id.slice(instance.sourceId.length),
+	};
+}

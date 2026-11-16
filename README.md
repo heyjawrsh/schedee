@@ -38,6 +38,58 @@ pnpm lint
 | `worker`        | Stateless Cloudflare Worker for OAuth token exchange         |
 | `docs/re`       | Measurements taken from the reference app                    |
 
+### Connecting a Google account in development
+
+Without this the app runs on built-in demo calendars. To sync a real Google account you need your own Google OAuth clients and the auth Worker running locally.
+
+1. In [Google Cloud console](https://console.cloud.google.com/projectcreate), create a project and [enable the Google Calendar API](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com).
+2. Under [Audience](https://console.cloud.google.com/auth/audience), choose External, keep it in Testing and add yourself as a test user. Under [Data Access](https://console.cloud.google.com/auth/scopes), add `calendar.events`, `calendar.calendarlist.readonly`, `openid` and `email`.
+3. Under [Clients](https://console.cloud.google.com/auth/clients), create a **Web application** client with JavaScript origin `http://localhost:5173` and redirect URI `http://localhost:8787/oauth/google/callback`. Copy the secret when it's shown; Google won't show it again.
+4. Create `worker/.env.local` (gitignored) with `GOOGLE_WEB_CLIENT_ID=...` and `GOOGLE_WEB_CLIENT_SECRET=...`. The variables are described in `worker/.env.schema`, which [Varlock](https://varlock.dev) validates; you can also point them at a secret manager, e.g. 1Password with `op(op://vault/item/field)`.
+5. Run the Worker and the app side by side:
+
+```sh
+pnpm --filter @schedee/worker dev   # auth Worker on http://localhost:8787
+pnpm dev                            # web app on http://localhost:5173
+```
+
+Then press ⌘K in the app and choose **Add Google Calendar account**. While the Google project is in Testing, Google asks you to sign in again every 7 days.
+
+Edits to synced events go back to Google. Each one is queued on the device with the edit itself and sent in order, so changes made offline go out when the connection returns. If Google refuses one, it's dropped and that calendar reloads from Google.
+
+If an account's sign-in expires or is revoked, a warning shows next to it in the sidebar with **Sign in again** (also in ⌘K). Its calendars stay on screen and queued edits wait until you're back. Refused edits show as a short note under the account.
+
+To remove an account, press ⌘K and choose **Remove account**. It clears that account's calendars, events, unsent edits and sign-in from this device (and the keychain on desktop). Nothing changes in Google.
+
+#### Desktop
+
+The desktop app signs in through your default browser and keeps the refresh token in the system keychain. It talks to Google directly, so it doesn't need the Worker.
+
+1. Under [Clients](https://console.cloud.google.com/auth/clients), create a **Desktop app** client in the same project. It needs no redirect URI.
+2. Create `apps/desktop/.env.local` (gitignored) with `GOOGLE_DESKTOP_CLIENT_ID=...` and `GOOGLE_DESKTOP_CLIENT_SECRET=...`, described in `apps/desktop/.env.schema`. They're compiled into the app; Google treats a desktop client's secret as public, but keep it out of the repo.
+3. Run `pnpm desktop`, then press ⌘K and choose **Add Google Calendar account**.
+
+Unsigned dev builds may ask for keychain access after each rebuild; choose **Always Allow**.
+
+### iCloud and CalDAV (desktop)
+
+The desktop app reads and edits iCloud calendars and other CalDAV servers. Browsers can't reach CalDAV servers directly, so the web build doesn't offer this.
+
+1. For iCloud, create an app-specific password at [account.apple.com](https://account.apple.com/account/manage) under **Sign-In and Security → App-Specific Passwords**.
+2. Press ⌘K and choose **Add iCloud account** (Apple ID, then that password) or **Add CalDAV account** (server address, username, password).
+
+The login lives in the system keychain. Rust adds it to each request and only sends it to that account's server. Calendars sync incrementally, and a calendar that hasn't changed isn't fetched again. Edits go back one event at a time and only rewrite the fields you changed. If an event changed on another device first, your edit is dropped and the account shows a note. Calendars shared with you read-only stay read-only.
+
+### Desktop shortcuts and login
+
+The desktop app adds two shortcuts that work from any app: ⌃⌥⌘S shows or hides Schedee, and ⌃⌥⌘N starts a new event today. Change either from the command menu (⌘K, then "shortcut"), or type `off`. Keys another app already uses are turned down. The command menu also turns **Open Schedee at login** on and off.
+
+### Calendar feeds
+
+Press ⌘K and choose **Subscribe to calendar feed**, then paste a `webcal://` or `https://` link (holidays, sports fixtures, a shared calendar's secret address). Feeds are read-only and sit under **Subscriptions** in the sidebar. They refresh about once an hour, or as often as the feed asks but no more than every 15 minutes. If a feed can't be loaded, a warning shows on its row and the last copy stays on screen.
+
+The web build fetches feeds through the Worker, since feeds don't allow browsers to load them directly. The desktop app fetches them itself. Both only reach public hosts and never log the link, which often holds a secret. Subscriptions are kept per device for now ([#25](https://github.com/heyjawrsh/schedee/issues/25)).
+
 ## License
 
 [AGPL-3.0](LICENSE). If you run a modified Schedee as a service, you share your changes.
