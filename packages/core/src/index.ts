@@ -50,6 +50,7 @@ export {
 	vtimezone,
 	writeCalendarObject,
 } from "./icsWrite";
+export { type KeyCombo, parseKeys } from "./keys";
 export {
 	type AllDayPlacement,
 	layoutAllDay,

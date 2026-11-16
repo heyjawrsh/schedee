@@ -12,6 +12,7 @@ export { type ChipColors, chipColors, type Theme } from "./chipColors";
 export {
 	buildCommands,
 	type CalDavLogin,
+	type GlobalAction,
 	type ThemeChoice,
 } from "./commands";
 export { DaysView, type DaysViewProps } from "./DaysView";
