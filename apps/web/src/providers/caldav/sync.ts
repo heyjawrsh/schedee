@@ -1,7 +1,7 @@
 /**
  * CalDAV sync: find the account's calendars, then pull each one's changes since last time with
  * sync-collection (RFC 6578), or a full listing on servers without it. A calendar whose change
- * tag hasn't moved is skipped. Read-only for now.
+ * tag hasn't moved is skipped. Each resource's server copy is kept for writing back.
  */
 import {
 	type Account,
@@ -9,7 +9,7 @@ import {
 	type CalendarEvent,
 	parseIcs,
 } from "@schedee/core";
-import type { LocalStore } from "../../store/db";
+import type { DavObject, LocalStore } from "../../store/db";
 import {
 	DavError,
 	type DavItem,
@@ -29,11 +29,14 @@ const DEFAULT_COLOR = "#1BADF8";
 /** Resources per multiget. */
 const BATCH = 50;
 
-/** The last path segment, which names a calendar or an event resource within its parent. */
+/**
+ * The last path segment, which names a calendar or an event resource within its parent, without
+ * ".ics": a new event's key plus ".ics" is the name it's written under, so sync finds it again.
+ */
 export const keyOf = (href: string) =>
 	decodeURIComponent(
 		new URL(href).pathname.split("/").filter(Boolean).pop() ?? "",
-	);
+	).replace(/\.ics$/i, "");
 
 const text = (el: Element | undefined) => el?.textContent?.trim() || undefined;
 
@@ -55,14 +58,22 @@ async function principalAt(dav: DavRequest, url: string) {
 	}
 }
 
+export interface Discovery {
+	/** Where the account's calendars live. */
+	home: string;
+	/** The user's own email addresses (iCloud: the Apple ID and its aliases), lowercase. */
+	addresses: string[];
+}
+
 /**
- * Finds where an account's calendars live. Tries the server address, then the well-known
- * CalDAV address on that host. Throws DavError(401) for a wrong login.
+ * Finds where an account's calendars live and which addresses are the user's. Tries the server
+ * address, then the well-known CalDAV address on that host. Throws DavError(401) for a wrong
+ * login.
  */
 export async function discover(
 	dav: DavRequest,
 	server: string,
-): Promise<string> {
+): Promise<Discovery> {
 	const principal =
 		(await principalAt(dav, server)) ??
 		(await principalAt(dav, new URL("/.well-known/caldav", server).toString()));
@@ -72,13 +83,20 @@ export async function discover(
 		"PROPFIND",
 		principal,
 		"0",
-		propfindBody("<c:calendar-home-set/>"),
+		propfindBody("<c:calendar-home-set/><c:calendar-user-address-set/>"),
 	);
 	const item = items[0];
 	const home =
 		item && hrefIn(prop(item, NS.cal, "calendar-home-set"), principal);
 	if (!home) throw new DavError(404);
-	return home;
+	const set = item && prop(item, NS.cal, "calendar-user-address-set");
+	const addresses = set
+		? Array.from(set.getElementsByTagNameNS(NS.dav, "href"))
+				.map((h) => h.textContent?.trim() ?? "")
+				.filter((h) => /^mailto:/i.test(h))
+				.map((h) => h.slice("mailto:".length).toLowerCase())
+		: [];
+	return { home, addresses };
 }
 
 export interface RemoteCalendar {
@@ -87,7 +105,11 @@ export interface RemoteCalendar {
 	color: string;
 	ctag?: string;
 	syncToken?: string;
+	/** False when the server says we can only read it. */
+	writable: boolean;
 }
+
+const WRITE = new Set(["all", "write", "write-content"]);
 
 const isEventCalendar = (item: DavItem) => {
 	const type = prop(item, NS.dav, "resourcetype");
@@ -119,14 +141,22 @@ export async function listCalendars(
 		home,
 		"1",
 		propfindBody(
-			"<d:resourcetype/><d:displayname/><x:calendar-color/><c:supported-calendar-component-set/><cs:getctag/><d:sync-token/>",
+			"<d:resourcetype/><d:displayname/><x:calendar-color/><c:supported-calendar-component-set/><cs:getctag/><d:sync-token/><d:current-user-privilege-set/>",
 		),
 	);
 	return items.filter(isEventCalendar).map((item) => {
 		const color = text(prop(item, NS.apple, "calendar-color"));
 		const ctag = text(prop(item, NS.cs, "getctag"));
 		const syncToken = text(prop(item, NS.dav, "sync-token"));
+		const privileges = prop(item, NS.dav, "current-user-privilege-set");
+		// No privilege set means the server doesn't say; assume we can write.
+		const writable =
+			!privileges ||
+			Array.from(privileges.getElementsByTagNameNS(NS.dav, "*")).some((p) =>
+				WRITE.has(p.localName),
+			);
 		return {
+			writable,
 			href: item.href,
 			name: text(prop(item, NS.dav, "displayname")) ?? keyOf(item.href),
 			color:
@@ -142,7 +172,6 @@ export async function listCalendars(
 export const calendarIdFor = (accountId: string, href: string) =>
 	`${accountId}/${keyOf(href)}`;
 
-/** Read-only until writes back to the server are in. */
 export const mapCalendar = (
 	accountId: string,
 	c: RemoteCalendar,
@@ -150,7 +179,7 @@ export const mapCalendar = (
 	id: calendarIdFor(accountId, c.href),
 	name: c.name,
 	color: c.color,
-	readOnly: true,
+	...(c.writable ? {} : { readOnly: true }),
 });
 
 interface Changes {
@@ -200,7 +229,7 @@ async function fetchObjects(
 	calendar: string,
 	hrefs: string[],
 ) {
-	const out: { href: string; data: string }[] = [];
+	const out: { href: string; data: string; etag?: string }[] = [];
 	for (let i = 0; i < hrefs.length; i += BATCH) {
 		const { items } = await multistatus(
 			dav,
@@ -210,8 +239,10 @@ async function fetchObjects(
 			multigetBody(hrefs.slice(i, i + BATCH)),
 		);
 		for (const item of items) {
-			const data = text(prop(item, NS.cal, "calendar-data"));
-			if (data) out.push({ href: item.href, data });
+			const data = prop(item, NS.cal, "calendar-data")?.textContent;
+			const etag = text(prop(item, NS.dav, "getetag"));
+			if (data?.trim())
+				out.push({ href: item.href, data, ...(etag ? { etag } : {}) });
 		}
 	}
 	return out;
@@ -228,6 +259,8 @@ export async function syncCalendar(
 	accountId: string,
 	remote: RemoteCalendar,
 	zone: string,
+	/** The signed-in user's addresses, to mark them among guests. */
+	self: string[] = [],
 ): Promise<number> {
 	const calendarId = calendarIdFor(accountId, remote.href);
 	const prior = await store.getSyncState(calendarId);
@@ -245,9 +278,29 @@ export async function syncCalendar(
 	}
 
 	const put: CalendarEvent[] = [];
+	const objects: DavObject[] = [];
+	const me = new Set(self.map((a) => a.toLowerCase()));
 	for (const o of await fetchObjects(dav, remote.href, changes.changed)) {
+		const key = keyOf(o.href);
 		try {
-			put.push(...parseIcs(o.data, calendarId, zone, keyOf(o.href)).events);
+			for (const e of parseIcs(o.data, calendarId, zone, key).events)
+				put.push(
+					e.attendees
+						? {
+								...e,
+								attendees: e.attendees.map((a) =>
+									me.has(a.email) ? { ...a, self: true } : a,
+								),
+							}
+						: e,
+				);
+			objects.push({
+				id: `${calendarId}#${key}`,
+				calendarId,
+				href: o.href,
+				ics: o.data,
+				...(o.etag ? { etag: o.etag } : {}),
+			});
 		} catch {
 			// Skip a resource we can't read; keep the rest.
 		}
@@ -262,9 +315,10 @@ export async function syncCalendar(
 			accountId,
 			...(changes.syncToken ? { syncToken: changes.syncToken } : {}),
 			...(remote.ctag ? { ctag: remote.ctag } : {}),
+			href: remote.href,
 			syncedAt: Date.now(),
 		},
-		{ put, remove },
+		{ put, remove, objects },
 		reset,
 	);
 	return changes.changed.length + changes.removed.length;
@@ -281,17 +335,26 @@ export async function syncCalDavAccount(
 	if (!cred) return { calendars: 0, changed: 0 };
 	let home = cred.home;
 	if (!home) throw new DavError(401);
+	const server = cred.server ?? new URL("/", home).toString();
+	let addresses = cred.addresses;
+	if (!addresses) {
+		// Signed in before we kept the user's addresses: look them up, and read every event again
+		// so the user is found among its guests.
+		({ home, addresses } = await discover(dav, server));
+		await store.updateCredential({ ...cred, home, addresses });
+		await store.db.syncState.where("accountId").equals(account.id).delete();
+	}
 	let remote: RemoteCalendar[];
 	try {
 		remote = await listCalendars(dav, home);
 	} catch (e) {
 		// The home moved: look it up again once.
 		if (!(e instanceof DavError) || e.status !== 404) throw e;
-		const server = new URL("/", home).toString();
-		home = await discover(dav, server);
-		await store.updateCredential({ ...cred, home });
+		({ home, addresses } = await discover(dav, server));
+		await store.updateCredential({ ...cred, home, addresses });
 		remote = await listCalendars(dav, home);
 	}
+	const self = [...new Set([...addresses, account.label.toLowerCase()])];
 	// The account may have been removed while the list was loading; don't bring it back.
 	const kept = await store.upsertAccount(
 		{
@@ -305,6 +368,6 @@ export async function syncCalDavAccount(
 	if (!kept) return { calendars: 0, changed: 0 };
 	let changed = 0;
 	for (const c of remote)
-		changed += await syncCalendar(store, dav, account.id, c, zone);
+		changed += await syncCalendar(store, dav, account.id, c, zone, self);
 	return { calendars: remote.length, changed };
 }

@@ -64,6 +64,20 @@ export interface DavResponse {
 	body: string;
 	/** Where it ended up after redirects. */
 	url: string;
+	/** The resource's new version after a write, when the server says. */
+	etag?: string;
+}
+
+export type DavMethod = "PROPFIND" | "REPORT" | "GET" | "PUT" | "DELETE";
+
+export interface DavOptions {
+	depth?: "0" | "1";
+	body?: string;
+	contentType?: "text/calendar";
+	/** Only write over this version. */
+	ifMatch?: string;
+	/** Only create: fail if the resource exists. */
+	ifNoneMatch?: boolean;
 }
 
 /** Saves a CalDAV login to the keychain; the password never comes back out. */
@@ -79,15 +93,7 @@ export const desktopCalDavForget = (accountId: string) =>
 /** One WebDAV request, sent from Rust with the account's login. */
 export const desktopDav = (
 	accountId: string,
-	method: "PROPFIND" | "REPORT" | "GET",
+	method: DavMethod,
 	url: string,
-	depth?: "0" | "1",
-	body?: string,
-) =>
-	call<DavResponse>("caldav_request", {
-		accountId,
-		method,
-		url,
-		depth: depth ?? null,
-		body: body ?? null,
-	});
+	options: DavOptions = {},
+) => call<DavResponse>("caldav_request", { accountId, method, url, options });

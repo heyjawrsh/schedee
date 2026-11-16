@@ -168,3 +168,49 @@ describe("command list", () => {
 		expect(calls).toEqual([["b", false]]);
 	});
 });
+
+describe("desktop settings", () => {
+	it("turns opening at login on and off", () => {
+		const set: boolean[] = [];
+		const off = setup({
+			launchAtLogin: false,
+			onLaunchAtLogin: (on) => set.push(on),
+		});
+		expect(off.item("launch-at-login").label).toBe("Open Schedee at login");
+		off.item("launch-at-login").run?.();
+		const on = setup({
+			launchAtLogin: true,
+			onLaunchAtLogin: (v) => set.push(v),
+		});
+		expect(on.item("launch-at-login").label).toBe(
+			"Don't open Schedee at login",
+		);
+		on.item("launch-at-login").run?.();
+		expect(set).toEqual([true, false]);
+	});
+
+	it("changes a shortcut from typed keys, or turns it off", async () => {
+		const calls: [string, string][] = [];
+		const { item } = setup({
+			globalShortcuts: { show: "⌃⌥⌘S", "new-event": "" },
+			onGlobalShortcut: async (action, keys) => {
+				calls.push([action, keys]);
+				return true;
+			},
+		});
+		expect(item("global-show").label).toBe(
+			"Change shortcut to show or hide Schedee… (⌃⌥⌘S)",
+		);
+		expect(item("global-new-event").label).toBe(
+			"Change shortcut to create an event…",
+		);
+		const prompt = item("global-show").prompt;
+		expect(prompt?.submit("s")).toBe(false);
+		expect(await prompt?.submit("ctrl+option+cmd+k")).toBe(true);
+		expect(await prompt?.submit("off")).toBe(true);
+		expect(calls).toEqual([
+			["show", "ctrl+option+cmd+k"],
+			["show", ""],
+		]);
+	});
+});

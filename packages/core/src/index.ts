@@ -37,7 +37,20 @@ export {
 	planGoogleWrites,
 	toGoogleBody,
 } from "./googleWrite";
-export { feedUrl, type ParsedFeed, parseIcs, resolveZone } from "./ics";
+export {
+	feedUrl,
+	type IcsEntry,
+	type ParsedFeed,
+	parseIcs,
+	readIcs,
+	resolveZone,
+} from "./ics";
+export {
+	type CalendarObjectInput,
+	vtimezone,
+	writeCalendarObject,
+} from "./icsWrite";
+export { type KeyCombo, parseKeys } from "./keys";
 export {
 	type AllDayPlacement,
 	layoutAllDay,

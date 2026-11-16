@@ -3,7 +3,7 @@
  * multistatus answers. Requests go out through a `DavRequest`, which on desktop is Rust adding
  * the account's login.
  */
-import type { DavResponse } from "../google/desktop";
+import type { DavMethod, DavOptions, DavResponse } from "../google/desktop";
 
 export const NS = {
 	dav: "DAV:",
@@ -13,10 +13,9 @@ export const NS = {
 } as const;
 
 export type DavRequest = (
-	method: "PROPFIND" | "REPORT" | "GET",
+	method: DavMethod,
 	url: string,
-	depth?: "0" | "1",
-	body?: string,
+	options?: DavOptions,
 ) => Promise<DavResponse>;
 
 export class DavError extends Error {
@@ -116,7 +115,7 @@ export async function multistatus(
 	depth: "0" | "1" | undefined,
 	body: string,
 ) {
-	const res = await dav(method, url, depth, body);
+	const res = await dav(method, url, { ...(depth ? { depth } : {}), body });
 	if (res.status !== 207) throw new DavError(res.status);
 	return parseMultistatus(res.body, res.url);
 }
