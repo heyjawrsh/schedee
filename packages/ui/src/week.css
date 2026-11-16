@@ -279,6 +279,15 @@
 	width: 20px;
 	height: 20px;
 }
+/* A calendar that can't load: our own design, not from the reference. */
+.sch-calrow__alert {
+	position: absolute;
+	right: 9px;
+	color: var(--accent);
+}
+.sch-calrow--hidden .sch-calrow__alert {
+	right: 32px;
+}
 .sch-sidebar__footer {
 	position: absolute;
 	left: 0;
@@ -532,7 +541,14 @@
 	left: 0;
 	right: 0;
 	bottom: 0;
-	overflow: hidden;
+	overflow-x: hidden;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	/* Our choice: no scrollbar, so the grid keeps its full width. */
+	scrollbar-width: none;
+}
+.sch-grid::-webkit-scrollbar {
+	display: none;
 }
 .sch-grid__inner {
 	position: relative;

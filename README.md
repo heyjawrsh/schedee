@@ -71,6 +71,25 @@ The desktop app signs in through your default browser and keeps the refresh toke
 
 Unsigned dev builds may ask for keychain access after each rebuild; choose **Always Allow**.
 
+### iCloud and CalDAV (desktop)
+
+The desktop app reads and edits iCloud calendars and other CalDAV servers. Browsers can't reach CalDAV servers directly, so the web build doesn't offer this.
+
+1. For iCloud, create an app-specific password at [account.apple.com](https://account.apple.com/account/manage) under **Sign-In and Security → App-Specific Passwords**.
+2. Press ⌘K and choose **Add iCloud account** (Apple ID, then that password) or **Add CalDAV account** (server address, username, password).
+
+The login lives in the system keychain. Rust adds it to each request and only sends it to that account's server. Calendars sync incrementally, and a calendar that hasn't changed isn't fetched again. Edits go back one event at a time and only rewrite the fields you changed. If an event changed on another device first, your edit is dropped and the account shows a note. Calendars shared with you read-only stay read-only.
+
+### Desktop shortcuts and login
+
+The desktop app adds two shortcuts that work from any app: ⌃⌥⌘S shows or hides Schedee, and ⌃⌥⌘N starts a new event today. Change either from the command menu (⌘K, then "shortcut"), or type `off`. Keys another app already uses are turned down. The command menu also turns **Open Schedee at login** on and off.
+
+### Calendar feeds
+
+Press ⌘K and choose **Subscribe to calendar feed**, then paste a `webcal://` or `https://` link (holidays, sports fixtures, a shared calendar's secret address). Feeds are read-only and sit under **Subscriptions** in the sidebar. They refresh about once an hour, or as often as the feed asks but no more than every 15 minutes. If a feed can't be loaded, a warning shows on its row and the last copy stays on screen.
+
+The web build fetches feeds through the Worker, since feeds don't allow browsers to load them directly. The desktop app fetches them itself. Both only reach public hosts and never log the link, which often holds a secret. Subscriptions are kept per device for now ([#25](https://github.com/heyjawrsh/schedee/issues/25)).
+
 ## License
 
 [AGPL-3.0](LICENSE). If you run a modified Schedee as a service, you share your changes.
